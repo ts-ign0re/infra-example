@@ -118,6 +118,12 @@
 - make tilt-down: остановить Tilt
 - make infra-down: удалить ресурсы и namespace
 
-## Документация
+## Как добавить Git Submodule
 
-- Архитектура и события: docs/plan.md, docs/specs.md
+```bash
+git submodule add git@github.com:ts-ign0re/react-router-shadcn-starter.git packages/tenants-dashboard
+```
+
+### Где
+1. `git@github.com:ts-ign0re/react-router-shadcn-starter.git` - URL репозитория который требуется подключить к системе
+2. `packages/tenants-dashboard` - путь к папке, в которую будет добавлен репозиторий со всей историей
