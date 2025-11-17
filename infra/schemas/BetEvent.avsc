@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "BetEvent",
+  "namespace": "io.sportify.bets",
+  "doc": "События ставок",
+  "fields": [
+    { "name": "id", "type": "string", "doc": "Уникальный ID события (UUID)" },
+    { "name": "tenant_id", "type": "string", "doc": "ID тенанта" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID ставки (aggregate root)" },
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "BetEventType",
+        "doc": "Типы событий ставок. ВАЖНО: добавлять новые события только в конец списка!",
+        "symbols": [
+          "V1_BETS_BET_PLACED",
+          "V1_BETS_BET_RESERVED",
+          "V1_BETS_BET_CONFIRMED",
+          "V1_BETS_BET_REJECTED",
+          "V1_BETS_BET_SETTLED",
+          "V1_BETS_BET_CANCELLED",
+          "V1_BETS_BET_VOIDED"
+        ]
+      },
+      "doc": "Тип события из списка symbols"
+    },
+    {
+      "name": "event_data",
+      "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] },
+      "doc": "Данные события (bet_id, user_id, stake, odds, fixture_id, etc.). Денежные суммы строго в центах (long)!"
+    },
+    { "name": "event_name", "type": "string", "doc": "Полное имя события (v1.bets.bet.placed и т.п.)" },
+    { "name": "timestamp", "type": "long", "doc": "Unix timestamp в миллисекундах" },
+    { "name": "version", "type": "int", "default": 1, "doc": "Версия схемы события" },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null, "doc": "Опциональные метаданные" }
+  ]
+}

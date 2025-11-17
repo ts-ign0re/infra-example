@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: citus-coordinator
+  namespace: dev-infra
+spec:
+  selector:
+    app: citus-coordinator
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: citus-coordinator
+  namespace: dev-infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: citus-coordinator
+  template:
+    metadata:
+      labels:
+        app: citus-coordinator
+    spec:
+      containers:
+        - name: postgres
+          image: citusdata/citus:12.1
+          args: ["-c", "shared_preload_libraries=citus"]
+          env:
+            - name: POSTGRES_USER
+              value: "app"
+            - name: POSTGRES_PASSWORD
+              value: "app"
+            - name: POSTGRES_DB
+              value: "app"
+          ports:
+            - containerPort: 5432
+              name: pg
+          readinessProbe:
+            exec:
+              command: ["pg_isready","-U","app","-d","app"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          emptyDir: {}
+

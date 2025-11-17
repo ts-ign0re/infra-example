@@ -1,0 +1,3 @@
+[submodule "packages/tenants-dashboard"]
+	path = packages/tenants-dashboard
+	url = git@github.com:ts-ign0re/react-router-shadcn-starter.git

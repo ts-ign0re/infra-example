@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "SystemEvent",
+  "namespace": "io.sportify.system",
+  "doc": "Некритические системные события (analytics, debug)",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "tenant_id", "type": "string" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID связанной сущности" },
+    { "name": "event_type", "type": "string", "doc": "Канонический идентификатор события в UPPER_SNAKE_CASE, например V1_SYSTEM_USER_REGISTERED" },
+    { "name": "event_data", "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] } },
+    { "name": "timestamp", "type": "long" },
+    { "name": "version", "type": "int", "default": 1 },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null }
+  ]
+}

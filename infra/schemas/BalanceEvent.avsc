@@ -1,0 +1,39 @@
+{
+  "type": "record",
+  "name": "BalanceEvent",
+  "namespace": "io.sportify.balances",
+  "doc": "События перемещения средств балансов клиентов",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "tenant_id", "type": "string" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID баланса клиента" },
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "BalanceEventType",
+        "doc": "Типы событий балансов. ВАЖНО: добавлять новые события только в конец списка!",
+        "symbols": [
+          "V1_BALANCES_BALANCE_RESERVED",
+          "V1_BALANCES_BALANCE_RELEASED",
+          "V1_BALANCES_BALANCE_DEBITED",
+          "V1_BALANCES_BALANCE_CREDITED",
+          "V1_BALANCES_BONUS_ADDED",
+          "V1_BALANCES_BONUS_DEBITED",
+          "V1_BALANCES_BONUS_CONVERTED",
+          "V1_BALANCES_BONUS_EXPIRED",
+          "V1_BALANCES_BONUS_CANCELLED"
+        ]
+      }
+    },
+    {
+      "name": "event_data",
+      "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] },
+      "doc": "Данные события (user_id, amount, balance, bet_id, payment_id, etc.). Все суммы в центах (long)!"
+    },
+    { "name": "timestamp", "type": "long" },
+    { "name": "version", "type": "int", "default": 1 },
+    { "name": "event_name", "type": "string", "doc": "Полное имя события (v1.balances.balance.reserved и т.п.)" },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null }
+  ]
+}

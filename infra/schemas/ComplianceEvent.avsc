@@ -1,0 +1,51 @@
+{
+  "type": "record",
+  "name": "ComplianceEvent",
+  "namespace": "io.sportify.compliance",
+  "doc": "Регуляторные события для аудита",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "tenant_id", "type": "string" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID пользователя или сущности" },
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "ComplianceEventType",
+        "doc": "Типы compliance событий. ВАЖНО: добавлять новые события только в конец списка!",
+        "symbols": [
+          "V1_COMPLIANCE_KYC_STARTED",
+          "V1_COMPLIANCE_KYC_COMPLETED",
+          "V1_COMPLIANCE_KYC_FAILED",
+          "V1_COMPLIANCE_DOCUMENT_UPLOADED",
+          "V1_COMPLIANCE_ADDRESS_VERIFIED",
+          "V1_COMPLIANCE_AML_SCREENED",
+          "V1_COMPLIANCE_EXCLUSION_ACTIVATED",
+          "V1_COMPLIANCE_EXCLUSION_EXPIRED",
+          "V1_COMPLIANCE_COOLING_OFF_ACTIVATED",
+          "V1_COMPLIANCE_LIMIT_LOSS_EXCEEDED",
+          "V1_COMPLIANCE_LIMIT_DEPOSIT_SET",
+          "V1_COMPLIANCE_LIMIT_DEPOSIT_EXCEEDED",
+          "V1_COMPLIANCE_RG_ALERT_TRIGGERED",
+          "V1_COMPLIANCE_RISK_CALCULATED",
+          "V1_COMPLIANCE_RISK_DETECTED",
+          "V1_COMPLIANCE_FRAUD_DETECTED",
+          "V1_COMPLIANCE_MULTI_ACCOUNTING_SUSPECTED",
+          "V1_COMPLIANCE_USER_BLOCKED",
+          "V1_COMPLIANCE_USER_UNBLOCKED",
+          "V1_COMPLIANCE_IP_BLOCKED",
+          "V1_COMPLIANCE_JURISDICTION_DENIED",
+          "V1_COMPLIANCE_VIOLATION_DETECTED",
+          "V1_COMPLIANCE_UNDERAGE_ATTEMPTED",
+          "V1_COMPLIANCE_JURISDICTION_UNAUTHORIZED",
+          "V1_COMPLIANCE_TRANSACTION_SUSPICIOUS"
+        ]
+      }
+    },
+    { "name": "event_data", "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] } },
+    { "name": "timestamp", "type": "long" },
+    { "name": "version", "type": "int", "default": 1 },
+    { "name": "event_name", "type": "string", "doc": "Полное имя события (v1.compliance.kyc.started и т.п.)" },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null }
+  ]
+}

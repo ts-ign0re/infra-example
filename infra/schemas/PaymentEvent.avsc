@@ -1,0 +1,45 @@
+{
+  "type": "record",
+  "name": "PaymentEvent",
+  "namespace": "io.sportify.payments",
+  "doc": "Платёжные события",
+  "fields": [
+    { "name": "id", "type": "string", "doc": "Уникальный ID события (UUID)" },
+    { "name": "tenant_id", "type": "string", "doc": "ID тенанта" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID платежа" },
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "PaymentEventType",
+        "doc": "Типы платёжных событий. Добавлять новые события только в конец списка!",
+        "symbols": [
+          "V1_PAYMENTS_DEPOSIT_CREATED",
+          "V1_PAYMENTS_DEPOSIT_PENDING",
+          "V1_PAYMENTS_DEPOSIT_COMPLETED",
+          "V1_PAYMENTS_DEPOSIT_FAILED",
+          "V1_PAYMENTS_DEPOSIT_REFUNDED",
+          "V1_PAYMENTS_WITHDRAWAL_REQUESTED",
+          "V1_PAYMENTS_WITHDRAWAL_PENDING",
+          "V1_PAYMENTS_WITHDRAWAL_APPROVED",
+          "V1_PAYMENTS_WITHDRAWAL_COMPLETED",
+          "V1_PAYMENTS_WITHDRAWAL_REJECTED",
+          "V1_PAYMENTS_WITHDRAWAL_CANCELLED",
+          "V1_PAYMENTS_CHARGEBACK_RECEIVED",
+          "V1_PAYMENTS_CHARGEBACK_DISPUTED",
+          "V1_PAYMENTS_CHARGEBACK_WON",
+          "V1_PAYMENTS_CHARGEBACK_LOST"
+        ]
+      }
+    },
+    {
+      "name": "event_data",
+      "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] },
+      "doc": "Данные события (user_id, amount, currency, payment_method, provider, etc.). Денежные суммы строго в центах (long)!"
+    },
+    { "name": "event_name", "type": "string", "doc": "Полное имя события (v1.payments.deposit.completed и т.п.)" },
+    { "name": "timestamp", "type": "long" },
+    { "name": "version", "type": "int", "default": 1 },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null }
+  ]
+}

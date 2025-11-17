@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: schema-registry
+  namespace: dev-infra
+spec:
+  selector:
+    app: schema-registry
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: schema-registry
+  namespace: dev-infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: schema-registry
+  template:
+    metadata:
+      labels:
+        app: schema-registry
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-redpanda
+          image: redpandadata/redpanda:latest
+          command: ["bash","-lc"]
+          args:
+            - |
+              echo "Waiting for Redpanda cluster health...";
+              for i in $(seq 1 90); do
+                if rpk cluster health --watch=false --exit-when-healthy --api-urls=redpanda.dev-infra.svc.cluster.local:9644 >/dev/null 2>&1; then
+                  echo "Redpanda is healthy"; exit 0; fi; sleep 2; done; echo "Redpanda not healthy in time"; exit 1
+      containers:
+        - name: schema-registry
+          image: confluentinc/cp-schema-registry:7.6.0
+          command: ["bash","-lc"]
+          args:
+            - |
+              set -ex
+              echo "=== ENV ==="; env | sort
+              echo "=== /etc/schema-registry/schema-registry.properties ==="; [ -f /etc/schema-registry/schema-registry.properties ] && cat /etc/schema-registry/schema-registry.properties || true
+              exec /etc/confluent/docker/run
+          env:
+            # Prevent deprecated PORT handling from service envs
+            - name: PORT
+              value: ""
+            - name: SCHEMA_REGISTRY_HOST_NAME
+              value: schema-registry
+            - name: SCHEMA_REGISTRY_LISTENERS
+              value: http://0.0.0.0:8081
+            - name: SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS
+              value: redpanda.dev-infra.svc.cluster.local:9092
+            - name: SCHEMA_REGISTRY_KAFKASTORE_SECURITY_PROTOCOL
+              value: PLAINTEXT
+            - name: SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: SCHEMA_REGISTRY_HEAP_OPTS
+              value: "-Xms256m -Xmx512m"
+            - name: SCHEMA_REGISTRY_KAFKASTORE_INIT_TIMEOUT_MS
+              value: "120000"
+            - name: SCHEMA_REGISTRY_KAFKASTORE_TIMEOUT_MS
+              value: "120000"
+            - name: SCHEMA_REGISTRY_DEBUG
+              value: "true"
+            - name: SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL
+              value: "DEBUG"
+          ports:
+            - containerPort: 8081
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /subjects
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /subjects
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
