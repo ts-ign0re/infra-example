@@ -7,6 +7,9 @@ k8s_yaml([
   'k8s/citus-coordinator.yaml',
   'k8s/citus-worker.yaml',
   'k8s/citus-init.yaml',
+  'k8s/observability/loki.yaml',
+  'k8s/observability/promtail.yaml',
+  'k8s/observability/grafana.yaml',
 ])
 
 redpanda_ports = [port_forward(19092, 9092), port_forward(9644, 9644)]
@@ -15,3 +18,6 @@ k8s_resource('schema-registry', port_forwards=[port_forward(8081, 8081)], resour
 k8s_resource('redis', port_forwards=[port_forward(6379, 6379)])
 k8s_resource('citus-coordinator', port_forwards=[port_forward(5432, 5432)])
 k8s_resource('citus-worker')
+k8s_resource('loki', port_forwards=[port_forward(3100, 3100)])
+k8s_resource('promtail', resource_deps=['loki'])
+k8s_resource('grafana', port_forwards=[port_forward(3000, 3000)], resource_deps=['loki'])

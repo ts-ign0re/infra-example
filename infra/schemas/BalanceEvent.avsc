@@ -5,7 +5,7 @@
   "doc": "События перемещения средств балансов клиентов",
   "fields": [
     { "name": "id", "type": "string" },
-    { "name": "tenant_id", "type": "string" },
+    { "name": "tenant_id", "type": "long" },
     { "name": "aggregate_id", "type": "string", "doc": "ID баланса клиента" },
     {
       "name": "event_type",

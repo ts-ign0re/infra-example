@@ -5,7 +5,7 @@
   "doc": "Платёжные события",
   "fields": [
     { "name": "id", "type": "string", "doc": "Уникальный ID события (UUID)" },
-    { "name": "tenant_id", "type": "string", "doc": "ID тенанта" },
+    { "name": "tenant_id", "type": "long", "doc": "ID тенанта (numeric)" },
     { "name": "aggregate_id", "type": "string", "doc": "ID платежа" },
     {
       "name": "event_type",

@@ -36,10 +36,9 @@ spec:
               echo "Creating tenants table and seeding default tenant...";
               psql -v ON_ERROR_STOP=1 <<'SQL'
               CREATE TABLE IF NOT EXISTS tenants (
-                id text PRIMARY KEY,
+                id bigint PRIMARY KEY,
                 created_at timestamptz DEFAULT now()
               );
               SELECT create_distributed_table('tenants','id');
-              INSERT INTO tenants(id) VALUES ('tenant-1') ON CONFLICT (id) DO NOTHING;
+              INSERT INTO tenants(id) VALUES (10001) ON CONFLICT (id) DO NOTHING;
               SQL
-

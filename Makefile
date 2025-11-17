@@ -19,11 +19,24 @@ infra-down:
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
 		$(COMPOSE) down -v ; \
 	else \
+		TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh 2>/dev/null || true) ; \
+		if [ -n "$$TILT_BIN" ]; then ( cd $(INFRA_DIR) && $$TILT_BIN down ) || true ; fi ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/observability/grafana.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/observability/promtail.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/observability/loki.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/citus-init.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/citus-worker.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/citus-coordinator.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/postgres.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/redis.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/schema-registry.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/redpanda.yaml -n $(K8S_NS) --ignore-not-found ; \
-		kubectl delete -f $(INFRA_DIR)/k8s/namespace.yaml --ignore-not-found ; \
+		kubectl delete namespace $(K8S_NS) --ignore-not-found || true ; \
+		for i in $$(seq 1 60); do \
+			if ! kubectl get ns $(K8S_NS) >/dev/null 2>&1; then echo "Namespace $(K8S_NS) deleted"; break; fi; \
+			echo "Waiting for namespace $(K8S_NS) to terminate ..."; sleep 2; \
+			if [ "$$i" -eq 60 ]; then echo "Timed out waiting for namespace deletion"; exit 1; fi; \
+		done ; \
 	fi
 
 infra-restart: infra-down infra-up
@@ -80,3 +93,12 @@ integration:
 	( cd $(INFRA_DIR) && $$TILT_BIN ci ) && \
 	USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/integration-tests.sh && \
 	( cd $(INFRA_DIR) && $$TILT_BIN down )
+obs-up:
+	kubectl apply -f $(INFRA_DIR)/k8s/observability/loki.yaml -n $(K8S_NS)
+	kubectl apply -f $(INFRA_DIR)/k8s/observability/promtail.yaml -n $(K8S_NS)
+	kubectl apply -f $(INFRA_DIR)/k8s/observability/grafana.yaml -n $(K8S_NS)
+
+obs-down:
+	kubectl delete -f $(INFRA_DIR)/k8s/observability/grafana.yaml -n $(K8S_NS) --ignore-not-found
+	kubectl delete -f $(INFRA_DIR)/k8s/observability/promtail.yaml -n $(K8S_NS) --ignore-not-found
+	kubectl delete -f $(INFRA_DIR)/k8s/observability/loki.yaml -n $(K8S_NS) --ignore-not-found

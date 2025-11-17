@@ -64,15 +64,15 @@
 
 ### Тенанты в Citus
 
-- Сид создаёт тенанта `tenant-1`. Таблица `tenants(id text primary key, created_at timestamptz)` распределена по `id` и инициализируется с помощью Job.
+- Сид создаёт тенанта 10001. Таблица `tenants(id bigint primary key, created_at timestamptz)` распределена по `id` и инициализируется через Job.
 - Создать нового тенанта:
-  INSERT INTO tenants(id) VALUES ('tenant-42');
+  INSERT INTO tenants(id) VALUES (10002);
 
 - Распределять «тенантские» таблицы по `tenant_id` и коллокировать с `tenants`:
   SELECT create_distributed_table('your_table', 'tenant_id', colocate_with => 'tenants');
 
 - Разместить данные тенанта на конкретном воркере:
-  1) Узнать shard id: SELECT citus_get_shard_id_for_distribution_column('tenants'::regclass, 'tenant-42');
+  1) Узнать shard id: SELECT citus_get_shard_id_for_distribution_column('tenants'::regclass, 10002);
   2) Переместить шард: SELECT citus_move_shard_placement(<shard_id>, old_node, old_port, 'citus-worker-0.citus-worker.dev-infra.svc.cluster.local', 5432);
   В dev среде единственный воркер, поэтому перемещение обычно не требуется.
 
@@ -101,7 +101,7 @@
 - Топики по контекстам: V1_BETS, V1_PAYMENTS, V1_BALANCES, V1_COMPLIANCE, V1_SYSTEM
 - Субжекты SR: TopicNameStrategy → {topic}-value
 - Совместимость SR: BACKWARD_TRANSITIVE
-- Ключ сообщения Kafka: aggregate_id; рекомендуемые заголовки: tenant_id, version
+- Ключ сообщения Kafka: aggregate_id; рекомендуемые заголовки: tenant_id (numeric, e.g. 10001), version
 - Поля событий:
   - TIER1 (bets/payments/balances/compliance): `event_type` (enum UPPER_SNAKE_CASE)
   - system_events: `event_type` (string, UPPER_SNAKE_CASE)
@@ -119,6 +119,111 @@
 - make integration: поднять через Tilt (CI‑режим) и выполнить тесты
 - make tilt-down: остановить Tilt
 - make infra-down: удалить ресурсы и namespace
+
+## Observability (Dev/Stage)
+
+- По умолчанию поднимается вместе с `make tilt-up` (Loki, Promtail, Grafana загружаются из infra/Tiltfile).
+- Ручная установка/снос (если нужно без Tilt):
+  make obs-up
+  make obs-down
+
+- Grafana:
+  kubectl -n dev-infra port-forward svc/grafana 3000:3000
+  Откройте http://localhost:3000 (admin/admin). Datasource Loki уже настроен.
+
+- Promtail собирает stdout всех pod’ов; фильтруйте по labels (namespace=dev-infra, app=<service>).
+
+– Для доступа к UI Grafana при работе через Tilt уже есть port‑forward 3000 → 3000.
+
+## Logging (Loki)
+
+- Default (recommended): микросервисы пишут логи в stdout; Promtail (DaemonSet) подбирает логи контейнеров и отправляет их в Loki.
+  - Автолейблы: `namespace`, `pod`, `app`, `container`, `node` (см. promtail relabel_configs).
+  - В dev использован мультитенантный Loki; для системных/инфра‑логов Promtail шлёт в tenant 10001.
+
+- Direct push (пер‑запросная мультитенантность, вариант B): микросервисы сами пушат логи в Loki и проставляют tenant из входящего HTTP‑заголовка клиента.
+  - Никогда не берите tenant из env — только из входящего запроса.
+  - Какой заголовок? Рекомендуем `X-Tenant-Id: <numeric>`; далее используйте это же значение для `X-Scope-OrgID` при пуше в Loki.
+  - Эндпоинт в кластере: `http://loki:3100/loki/api/v1/push`.
+  - Для локального сервиса вне кластера:
+    - Порт‑форвард: `kubectl -n dev-infra port-forward svc/loki 3100:3100`
+    - В `.env`: `LOKI_URL=http://localhost:3100`
+  - Пример curl:
+    ```bash
+    ts_ns=$(( $(date +%s) * 1000000000 ))
+    json='{"streams":[{"stream":{"service":"my-api","env":"dev"},"values":[["'"$ts_ns"'","hello from my-api"]]}]}'
+    curl -s -o /dev/null -w "%{http_code}\n" \
+      -H 'Content-Type: application/json' \
+      -H "X-Scope-OrgID: ${TENANT_ID_FROM_REQUEST}" \
+      -X POST --data "$json" "$LOKI_URL/loki/api/v1/push"
+    # Ожидаемый код: 204
+    ```
+  - Минимальные лейблы в stream: `service`, `env`, `version`.
+  - Не логируйте tenant в лейблах/теле, если это нарушает требования безопасности; достаточно заголовка `X-Scope-OrgID`.
+
+- Grafana:
+  - Explore → Datasource Loki (настроен с `X-Scope-OrgID: 10001` для dev‑обзора инфра‑логов).
+  - Примеры запросов: `{service="my-api"}`, `{namespace="dev-infra"}`.
+
+### Клиентские примеры (Direct push)
+
+- Node.js (Express)
+```js
+import fetch from 'node-fetch';
+
+const LOKI_URL = process.env.LOKI_URL || 'http://loki:3100';
+
+export async function logToLoki(req, message, labels = {}) {
+  const tenant = req.get('X-Tenant-Id'); // numeric, required
+  if (!tenant) return; // or 400/skip
+  const tsNs = BigInt(Date.now()) * 1000000n;
+  const stream = { stream: { service: 'my-api', env: 'dev', ...labels }, values: [[tsNs.toString(), message]] };
+  await fetch(`${LOKI_URL}/loki/api/v1/push`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Scope-OrgID': tenant },
+    body: JSON.stringify({ streams: [stream] }),
+  });
+}
+```
+
+- Go (net/http)
+```go
+tenant := r.Header.Get("X-Tenant-Id")
+if tenant != "" {
+  ts := time.Now().UnixNano()
+  body := fmt.Sprintf(`{"streams":[{"stream":{"service":"my-api","env":"dev"},"values":[["%d","%s"]]}]}`,
+    ts, "hello from go")
+  req, _ := http.NewRequest("POST", os.Getenv("LOKI_URL")+"/loki/api/v1/push", strings.NewReader(body))
+  req.Header.Set("Content-Type", "application/json")
+  req.Header.Set("X-Scope-OrgID", tenant)
+  http.DefaultClient.Do(req)
+}
+```
+
+- PHP
+```php
+$tenant = $_SERVER['HTTP_X_TENANT_ID'] ?? null;
+if ($tenant) {
+  $ts = (int)(microtime(true) * 1e9);
+  $json = json_encode([ 'streams' => [[
+    'stream' => ['service' => 'my-api', 'env' => 'dev'],
+    'values' => [[strval($ts), 'hello from php']]
+  ]]]);
+  $ch = curl_init(getenv('LOKI_URL').'/loki/api/v1/push');
+  curl_setopt_array($ch, [
+    CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-Scope-OrgID: '.$tenant],
+    CURLOPT_POSTFIELDS => $json,
+    CURLOPT_RETURNTRANSFER => true,
+  ]);
+  curl_exec($ch);
+  curl_close($ch);
+}
+```
+
+Validation tips
+- Требуйте numeric `X-Tenant-Id`, проверяйте на диапазон/доступ.
+- При отсутствии/невалидности — не пушьте в Loki (или используйте служебный tenant для ошибок авторизации).
+- Добавляйте лейблы `service`, `env`, `version`, чтобы удобно искать логи.
 
 ## Как добавить Git Submodule
 
