@@ -8,6 +8,8 @@
 
 ## Quick Start (Tilt + Kubernetes)
 
+На MacOS + установленный OrbStack + Активированный в настройках K8S не требуется ничего из нижеперечисленного. Достаточно выполнить команду `make tilt-up` и все заведется
+
 1) Скопируйте окружение:
    cp infra/.env.sample infra/.env
 
