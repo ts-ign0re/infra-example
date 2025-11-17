@@ -42,25 +42,46 @@
 ## Environment Variables
 
 - Основной файл окружения: infra/.env (создайте из infra/.env.sample)
-- Важные переменные:
-  - K8S: `K8S_NAMESPACE=dev-infra`
-  - Schema Registry: `SCHEMA_REGISTRY_URL=http://localhost:8081`, `SR_COMPATIBILITY=BACKWARD_TRANSITIVE`
-  - Kafka topics: `TOPIC_BETS`, `TOPIC_PAYMENTS`, `TOPIC_BALANCES`, `TOPIC_COMPLIANCE`, `TOPIC_SYSTEM`
-  - Docker Compose (опционально): `POSTGRES_*`, `SCHEMA_REGISTRY_PORT`, `REDIS_PORT`, `REDPANDA_*`
+- Ключевые переменные:
+  - `DATABASE_URL=postgresql://app:app@localhost:5432/app` - подключение к PostgreSQL/Citus
+  - `REDIS_URL=redis://localhost:6379` - подключение к Redis
+  - `KAFKA_BROKERS=localhost:19092` - Kafka broker
+  - `SCHEMA_REGISTRY_URL=http://localhost:8081` - Schema Registry
+  - `LOKI_URL=http://localhost:3100` - Loki для логирования
+  - `TOPIC_*` - имена Kafka топиков (V1_BETS, V1_PAYMENTS, etc.)
+  - `K8S_NAMESPACE=dev-infra` - namespace в Kubernetes
 
 Примечания:
-- Для k8s значения берутся из манифестов infra/k8s/*.yaml и пробросов Tilt; infra/.env используется скриптами и Docker Compose.
-- Для запуска через Docker Compose используйте префикс: USE_DOCKER=1 make infra-up …
+- Для k8s значения берутся из манифестов infra/k8s/*.yaml и пробросов Tilt
+- Для запуска через Docker Compose: `USE_DOCKER=1 make infra-up`
 
 ## Database (Postgres/Citus)
 
-- Credentials по умолчанию: user `app`, password `app`, database `app`.
-- Подключение (локально через Tilt):
-  psql "host=localhost port=5432 dbname=app user=app password=app sslmode=disable"
+- **Connection String:** `DATABASE_URL=postgresql://app:app@localhost:5432/app`
+- Подключение через psql:
+  ```bash
+  psql "postgresql://app:app@localhost:5432/app"
+  # или с переменной окружения:
+  psql $DATABASE_URL
+  ```
 
-- Примеры DSN:
-  - Node.js: postgres://app:app@localhost:5432/app
-  - PHP PDO: host=127.0.0.1;port=5432;dbname=app;user=app;password=app
+- Примеры использования в коде:
+  ```javascript
+  // Node.js
+  const { Pool } = require('pg');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  ```
+  ```php
+  // PHP
+  $dsn = getenv('DATABASE_URL');
+  $pdo = new PDO($dsn);
+  ```
+  ```python
+  # Python
+  import os
+  import psycopg2
+  conn = psycopg2.connect(os.environ['DATABASE_URL'])
+  ```
 
 ### Тенанты в Citus
 
@@ -76,25 +97,81 @@
   2) Переместить шард: SELECT citus_move_shard_placement(<shard_id>, old_node, old_port, 'citus-worker-0.citus-worker.dev-infra.svc.cluster.local', 5432);
   В dev среде единственный воркер, поэтому перемещение обычно не требуется.
 
+## Redis
+
+- **Connection String:** `REDIS_URL=redis://localhost:6379`
+- Примеры использования:
+  ```javascript
+  // Node.js (ioredis)
+  const Redis = require('ioredis');
+  const redis = new Redis(process.env.REDIS_URL);
+  ```
+  ```python
+  # Python
+  import os
+  import redis
+  r = redis.from_url(os.environ['REDIS_URL'])
+  ```
+  ```php
+  // PHP
+  $redis = new Redis();
+  $redis->connect(parse_url(getenv('REDIS_URL'), PHP_URL_HOST), 6379);
+  ```
+
 ## Redpanda (Kafka)
 
-- Брокер: localhost:19092
-- Пример rpk:
-  rpk cluster info --brokers localhost:19092
-  rpk topic create V1_SYSTEM -p 1 -r 1 --brokers localhost:19092
-  echo 'hello' | rpk topic produce V1_SYSTEM --brokers localhost:19092
-  rpk topic consume V1_SYSTEM -n 1 --brokers localhost:19092
-
-- Пример KafkaJS:
+- **Brokers:** `KAFKA_BROKERS=localhost:19092`
+- Примеры использования:
+  ```javascript
+  // Node.js (KafkaJS)
   const { Kafka } = require('kafkajs');
-  const kafka = new Kafka({ brokers: ['localhost:19092'] });
+  const kafka = new Kafka({
+    brokers: process.env.KAFKA_BROKERS.split(',')
+  });
+  ```
+  ```python
+  # Python (kafka-python)
+  from kafka import KafkaProducer
+  import os
+  producer = KafkaProducer(bootstrap_servers=os.environ['KAFKA_BROKERS'].split(','))
+  ```
+  ```go
+  // Go (sarama)
+  brokers := strings.Split(os.Getenv("KAFKA_BROKERS"), ",")
+  config := sarama.NewConfig()
+  producer, _ := sarama.NewSyncProducer(brokers, config)
+  ```
+
+- CLI утилита rpk:
+  ```bash
+  rpk cluster info --brokers $KAFKA_BROKERS
+  rpk topic create V1_SYSTEM -p 1 -r 1 --brokers $KAFKA_BROKERS
+  echo 'hello' | rpk topic produce V1_SYSTEM --brokers $KAFKA_BROKERS
+  rpk topic consume V1_SYSTEM -n 1 --brokers $KAFKA_BROKERS
+  ```
 
 ## Schema Registry
 
-- URL: http://localhost:8081
+- **URL:** `SCHEMA_REGISTRY_URL=http://localhost:8081`
 - Проверка:
-  curl -fsS http://localhost:8081/subjects
-- Регистрация схем: make register-schemas (использует TopicNameStrategy и ставит BACKWARD_TRANSITIVE на Subject)
+  ```bash
+  curl -fsS $SCHEMA_REGISTRY_URL/subjects
+  ```
+- Регистрация схем: `make register-schemas` (использует TopicNameStrategy и ставит BACKWARD_TRANSITIVE на Subject)
+- Примеры использования:
+  ```javascript
+  // Node.js (@kafkajs/confluent-schema-registry)
+  const { SchemaRegistry } = require('@kafkajs/confluent-schema-registry');
+  const registry = new SchemaRegistry({ 
+    host: process.env.SCHEMA_REGISTRY_URL 
+  });
+  ```
+  ```python
+  # Python (confluent-kafka)
+  from confluent_kafka.schema_registry import SchemaRegistryClient
+  import os
+  sr = SchemaRegistryClient({'url': os.environ['SCHEMA_REGISTRY_URL']})
+  ```
 
 ## Kafka Topics & Naming
 

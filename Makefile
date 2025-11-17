@@ -48,13 +48,6 @@ infra-wait:
 		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/wait-for-infra.sh ; \
 	fi
 
-infra-test:
-	@if [ "$(USE_DOCKER)" = "1" ]; then \
-		bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
-	else \
-		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
-	fi
-
 migrate:
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
 		bash $(INFRA_DIR)/scripts/migrate.sh ; \
@@ -102,3 +95,11 @@ obs-down:
 	kubectl delete -f $(INFRA_DIR)/k8s/observability/grafana.yaml -n $(K8S_NS) --ignore-not-found
 	kubectl delete -f $(INFRA_DIR)/k8s/observability/promtail.yaml -n $(K8S_NS) --ignore-not-found
 	kubectl delete -f $(INFRA_DIR)/k8s/observability/loki.yaml -n $(K8S_NS) --ignore-not-found
+
+# Enhanced integration tests v1.01 (with visual progress)
+infra-test:
+	@if [ "$(USE_DOCKER)" = "1" ]; then \
+		bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
+	else \
+		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
+	fi
