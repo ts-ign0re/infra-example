@@ -1,5 +1,5 @@
 infra/.env
+infra/bin/
 .DS_Store
 node_modules/
 vendor/
-
