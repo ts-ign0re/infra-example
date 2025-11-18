@@ -84,7 +84,7 @@ integration:
 	TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh) && \
 	kubectl apply -f $(INFRA_DIR)/k8s/namespace.yaml && \
 	( cd $(INFRA_DIR) && $$TILT_BIN ci ) && \
-	USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/integration-tests.sh && \
+	USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/tests/integration-tests.sh && \
 	( cd $(INFRA_DIR) && $$TILT_BIN down )
 obs-up:
 	kubectl apply -f $(INFRA_DIR)/k8s/observability/loki.yaml -n $(K8S_NS)
@@ -101,9 +101,9 @@ infra-test:
 	@echo "Registering Avro schemas before tests..."
 	@$(MAKE) register-schemas > /dev/null 2>&1 || true
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
-		bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
+		bash $(INFRA_DIR)/tests/integration-tests.sh ; \
 	else \
-		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
+		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/tests/integration-tests.sh ; \
 	fi
 
 # ============================================
@@ -116,9 +116,9 @@ event-sourcing-test:
 	@echo "Registering Avro schemas before tests..."
 	@$(MAKE) register-schemas > /dev/null 2>&1 || true
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
-		bash $(INFRA_DIR)/scripts/test-event-sourcing.sh ; \
+		bash $(INFRA_DIR)/tests/test-event-sourcing.sh ; \
 	else \
-		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/test-event-sourcing.sh ; \
+		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/tests/test-event-sourcing.sh ; \
 	fi
 
 # ============================================
