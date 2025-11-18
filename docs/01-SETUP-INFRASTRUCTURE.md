@@ -146,7 +146,7 @@ git submodule add git@github.com:org/my-service.git packages/my-service
 ### 2. Добавить инфраструктуру
 
 ```bash
-make add-infra PATH=packages/my-service
+make add-infra SERVICE_PATH=packages/my-service
 ```
 
 Скрипт спросит:
@@ -322,7 +322,7 @@ make infra-test          # Проверить инфраструктуру
 DEV_MODE=true make tilt-up
 
 # Добавить инфру в сервис
-make add-infra PATH=packages/my-service
+make add-infra SERVICE_PATH=packages/my-service
 
 # Логи
 kubectl logs -f -n dev-infra deployment/my-service

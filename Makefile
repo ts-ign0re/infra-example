@@ -111,13 +111,13 @@ infra-test:
 # ============================================
 
 add-infra:
-	@if [ -z "$(PATH)" ]; then \
-		echo "Usage: make add-infra PATH=packages/existing-service" ; \
+	@if [ -z "$(SERVICE_PATH)" ]; then \
+		echo "Usage: make add-infra SERVICE_PATH=packages/existing-service" ; \
 		echo "" ; \
-		echo "Example: make add-infra PATH=packages/tenants-dashboard" ; \
+		echo "Example: make add-infra SERVICE_PATH=packages/tenants-dashboard" ; \
 		exit 1 ; \
 	fi
-	@./scripts/service-add-infra.sh $(PATH)
+	@bash scripts/service-add-infra.sh $(SERVICE_PATH)
 
 # ============================================
 # ENVIRONMENT MANAGEMENT

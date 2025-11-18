@@ -374,7 +374,7 @@ git submodule update --init --recursive
 
 ```bash
 # Через make
-make add-infra PATH=packages/your-service
+make add-infra SERVICE_PATH=packages/your-service
 
 # Или напрямую скриптом
 ./scripts/service-add-infra.sh packages/your-service
