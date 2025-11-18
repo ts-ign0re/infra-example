@@ -28,6 +28,10 @@ SELECT * FROM bets_view WHERE tenant_id = $1 AND bet_id = $2;
 ### Ключевые правила:
 1. 📝 **Пишем** → Event tables (bet_events, payment_events, etc.)
 2. 🔄 **Триггеры** → Автоматически обновляют views
+3. 📖 **Читаем** → ТОЛЬКО из Materialized Views (bets_view, payments_view, etc.)
+4. 🔐 **Idempotency** → Проверяем в views, НЕ в event tables
+
+> ⚠️ **ВАЖНО:** Event tables (`*_events`) - только для INSERT! Для чтения (включая проверку idempotency) используйте materialized views.
 3. 📖 **Читаем** → Materialized views (bets_view, user_balances_view, etc.)
 4. 🔒 **Всегда** → Фильтруем по `tenant_id` 
 5. 🛡️ **Критические операции** → Используем `idempotency_key`
@@ -147,11 +151,12 @@ app.post('/bets', extractTenantId, async (req: any, res) => {
   try {
     await client.query('BEGIN');
     
-    // 1. Проверить idempotency key
+    // 1. Проверить idempotency key в materialized view
+    // (триггеры автоматически обновляют view после INSERT)
     const existing = await client.query(`
-      SELECT id FROM bet_events 
+      SELECT bet_id FROM bets_view 
       WHERE tenant_id = $1 
-        AND (metadata->>'idempotency_key') = $2
+        AND idempotency_key = $2
       LIMIT 1
     `, [tenantId, idempotencyKey]);
     
@@ -351,11 +356,12 @@ class BettingAPI {
         $this->db->beginTransaction();
         
         try {
-            // 1. Проверить idempotency key
+            // 1. Проверить idempotency key в materialized view
+            // (триггеры автоматически обновляют view после INSERT)
             $stmt = $this->db->prepare("
-                SELECT aggregate_id FROM bet_events 
+                SELECT bet_id FROM bets_view 
                 WHERE tenant_id = :tenant_id 
-                  AND metadata->>'idempotency_key' = :idempotency_key
+                  AND idempotency_key = :idempotency_key
                 LIMIT 1
             ");
             $stmt->execute([

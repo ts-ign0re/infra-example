@@ -439,7 +439,8 @@ REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view_tenant_10001;
 ### View не обновляется
 
 ```sql
--- Проверить, есть ли данные в event tables
+-- Проверить, есть ли данные в event tables (только для диагностики!)
+-- ⚠️ НЕ используйте для бизнес-логики - только для troubleshooting
 SELECT COUNT(*) FROM bet_events WHERE tenant_id = 10001;
 
 -- Проверить, есть ли данные в view

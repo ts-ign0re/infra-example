@@ -46,6 +46,7 @@ kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
 echo ""
 echo "4. Testing idempotency key protection..."
 IDEMPOTENCY_KEY="test-payment-$(date +%s)-$$"
+EXTERNAL_ID="ext-$IDEMPOTENCY_KEY"
 
 kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
   INSERT INTO payment_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version, metadata)
@@ -54,24 +55,51 @@ kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
     10001,
     'payment-idempotency-test',
     'V1_PAYMENTS_DEPOSIT_CREATED',
-    '{\"user_id\": \"user-test\", \"amount\": 1000}'::jsonb,
+    '{\"user_id\": \"user-test\", \"amount\": 1000, \"external_id\": \"$EXTERNAL_ID\"}'::jsonb,
     EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
     1,
     '{\"idempotency_key\": \"$IDEMPOTENCY_KEY\"}'::jsonb
   );
 " >/dev/null 2>&1
 
-# Try duplicate
+# Wait for trigger to update view
+sleep 1
+
+# Check that payment appears in view
 duplicate_result=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -tAc "
-  SELECT COUNT(*) FROM payment_events 
+  SELECT COUNT(*) FROM payments_view 
   WHERE tenant_id = 10001 
-    AND metadata->>'idempotency_key' = '$IDEMPOTENCY_KEY'
+    AND external_id = '$EXTERNAL_ID'
 " 2>/dev/null)
 
 if [ "$duplicate_result" = "1" ]; then
-  echo "   → Idempotency key protection working (found exactly 1 payment)"
+  echo "   → Payment materialized correctly (found in view)"
 else
-  echo "   → Idempotency key issue (found $duplicate_result payments)"
+  echo "   → View refresh issue (found $duplicate_result payments with external_id)"
+fi
+
+# Try duplicate insert (should fail due to metadata->idempotency_key unique constraint)
+set +e  # Temporarily disable exit on error
+duplicate_error=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
+  INSERT INTO payment_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version, metadata)
+  VALUES (
+    gen_random_uuid(),
+    10001,
+    'payment-idempotency-test-2',
+    'V1_PAYMENTS_DEPOSIT_CREATED',
+    '{\"user_id\": \"user-test\", \"amount\": 2000, \"external_id\": \"$EXTERNAL_ID-duplicate\"}'::jsonb,
+    EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+    1,
+    '{\"idempotency_key\": \"$IDEMPOTENCY_KEY\"}'::jsonb
+  );
+" 2>&1)
+set -e  # Re-enable exit on error
+
+if echo "$duplicate_error" | grep -q "duplicate key value violates unique constraint"; then
+  echo "   → Idempotency key protection working (duplicate rejected)"
+else
+  echo "   → Idempotency key issue (duplicate was accepted)"
+  echo "   → Error: $duplicate_error"
 fi
 
 # Test 5: Trigger verification
