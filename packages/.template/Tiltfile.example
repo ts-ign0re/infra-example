@@ -1,0 +1,135 @@
+# ============================================
+# Service-specific Tilt configuration
+# Copy this file to your service root as 'Tiltfile'
+# ============================================
+
+# Service configuration
+service_name = 'my-service'  # Change this!
+service_path = '.'
+
+# Check if DEV_MODE is enabled
+dev_mode = os.getenv('DEV_MODE', 'false') == 'true'
+
+# ============================================
+# OPTION 1: Node.js / pnpm (like tenants-dashboard)
+# ============================================
+if dev_mode:
+    docker_build(
+        service_name + '-dev',
+        service_path,
+        dockerfile='Dockerfile.dev',
+        live_update=[
+            sync('.', '/app'),
+            run('pnpm install', trigger=['package.json', 'pnpm-lock.yaml']),
+        ],
+        ignore=['node_modules', '.git', 'dist', 'build']
+    )
+    k8s_yaml(kustomize('k8s/overlays/dev-hmr'))
+    k8s_resource(
+        service_name + '-dev',
+        port_forwards=[port_forward(3000, 3000), port_forward(24678, 24678)],
+        resource_deps=['citus-coordinator', 'redis'],
+        labels=[service_name]
+    )
+else:
+    docker_build(
+        service_name,
+        service_path,
+        dockerfile='Dockerfile',
+        live_update=[
+            sync('.', '/app'),
+            run('pnpm install', trigger=['package.json']),
+        ],
+        ignore=['node_modules', '.git']
+    )
+    k8s_yaml(kustomize('k8s/overlays/dev'))
+    k8s_resource(
+        service_name,
+        port_forwards=[port_forward(3000, 3000)],
+        resource_deps=['citus-coordinator', 'redis'],
+        labels=[service_name]
+    )
+
+# ============================================
+# OPTION 2: Go
+# ============================================
+# docker_build(
+#     service_name,
+#     service_path,
+#     dockerfile='Dockerfile',
+#     live_update=[
+#         sync('.', '/app'),
+#         run('go mod download', trigger=['go.mod', 'go.sum']),
+#     ],
+#     ignore=['.git', 'vendor']
+# )
+# k8s_yaml(kustomize('k8s/overlays/dev'))
+# k8s_resource(
+#     service_name,
+#     port_forwards=[port_forward(8080, 8080)],
+#     resource_deps=['citus-coordinator', 'redis', 'redpanda'],
+#     labels=[service_name]
+# )
+
+# ============================================
+# OPTION 3: Python
+# ============================================
+# docker_build(
+#     service_name,
+#     service_path,
+#     dockerfile='Dockerfile',
+#     live_update=[
+#         sync('.', '/app'),
+#         run('pip install -r requirements.txt', trigger=['requirements.txt']),
+#     ],
+#     ignore=['.git', '__pycache__', '.venv']
+# )
+# k8s_yaml(kustomize('k8s/overlays/dev'))
+# k8s_resource(
+#     service_name,
+#     port_forwards=[port_forward(8000, 8000)],
+#     resource_deps=['citus-coordinator', 'redis'],
+#     labels=[service_name]
+# )
+
+# ============================================
+# OPTION 4: PHP
+# ============================================
+# docker_build(
+#     service_name,
+#     service_path,
+#     dockerfile='Dockerfile',
+#     live_update=[
+#         sync('.', '/var/www/html'),
+#         run('composer install', trigger=['composer.json', 'composer.lock']),
+#     ],
+#     ignore=['.git', 'vendor']
+# )
+# k8s_yaml(kustomize('k8s/overlays/dev'))
+# k8s_resource(
+#     service_name,
+#     port_forwards=[port_forward(80, 80)],
+#     resource_deps=['citus-coordinator', 'redis'],
+#     labels=[service_name]
+# )
+
+# ============================================
+# OPTION 5: C++ (minimal example)
+# ============================================
+# docker_build(
+#     service_name,
+#     service_path,
+#     dockerfile='Dockerfile',
+#     live_update=[
+#         sync('.', '/app'),
+#         run('cmake --build build', trigger=['CMakeLists.txt', 'src/**/*.cpp']),
+#     ],
+#     ignore=['.git', 'build', '.cache']
+# )
+# k8s_yaml(kustomize('k8s/overlays/dev'))
+# k8s_resource(
+#     service_name,
+#     port_forwards=[port_forward(9090, 9090)],
+#     resource_deps=['redis'],
+#     labels=[service_name]
+# )

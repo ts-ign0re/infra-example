@@ -3,12 +3,21 @@
 # Auto-discovers services in ../packages/
 # ============================================
 
+# Check if DEV_MODE is enabled (for HMR in cluster)
+dev_mode = os.getenv('DEV_MODE', 'false') == 'true'
+
+if dev_mode:
+    print("🔥 DEV_MODE enabled - Using HMR-enabled images")
+else:
+    print("📦 Production mode - Using optimized images")
+
 # ============================================
 # 1. INFRASTRUCTURE RESOURCES
 # ============================================
 print("📦 Loading infrastructure resources...")
 
 k8s_yaml([
+  'k8s/common-env-configmap.yaml',
   'k8s/redpanda.yaml',
   'k8s/schema-registry.yaml',
   'k8s/redis.yaml',
@@ -21,20 +30,42 @@ k8s_yaml([
 ])
 
 # Configure infrastructure resources
-redpanda_ports = [port_forward(19092, 9092), port_forward(9644, 9644)]
-k8s_resource('redpanda', port_forwards=redpanda_ports)
-k8s_resource('schema-registry', port_forwards=[port_forward(8081, 8081)], resource_deps=['redpanda'])
-k8s_resource('redis', port_forwards=[port_forward(6379, 6379)])
-k8s_resource('citus-coordinator', port_forwards=[port_forward(5432, 5432)])
-k8s_resource('citus-worker')
-k8s_resource('citus-init')
+k8s_resource('redpanda', 
+    port_forwards=[port_forward(19092, 9092), port_forward(9644, 9644)],
+    labels=['infrastructure']
+)
+
+k8s_resource('schema-registry', 
+    port_forwards=[port_forward(8081, 8081)], 
+    resource_deps=['redpanda'],
+    labels=['infrastructure']
+)
+
+k8s_resource('redis', 
+    port_forwards=[port_forward(6379, 6379)],
+    labels=['infrastructure']
+)
+
+k8s_resource('citus-coordinator', 
+    port_forwards=[port_forward(5432, 5432)],
+    labels=['infrastructure']
+)
+
+k8s_resource('citus-worker',
+    labels=['infrastructure']
+)
+
+k8s_resource('citus-init',
+    labels=['infrastructure']
+)
 
 # Observability stack with proper resource grouping
 k8s_resource('loki', 
     port_forwards=[port_forward(3100, 3100)],
     objects=[
         'loki-config:configmap'
-    ]
+    ],
+    labels=['observability']
 )
 
 k8s_resource('promtail', 
@@ -44,7 +75,8 @@ k8s_resource('promtail',
         'promtail:clusterrole',
         'promtail:clusterrolebinding',
         'promtail-config:configmap'
-    ]
+    ],
+    labels=['observability']
 )
 
 k8s_resource('grafana', 
@@ -52,7 +84,8 @@ k8s_resource('grafana',
     resource_deps=['loki'],
     objects=[
         'grafana-datasources:configmap'
-    ]
+    ],
+    labels=['observability']
 )
 
 # ============================================
@@ -116,37 +149,38 @@ for service in services:
     
     print("\n📦 Setting up: " + service_name)
     
-    # Build Docker image with live_update for hot-reload
-    docker_build(
-        service_name,
-        service_path,
-        dockerfile=service_path + '/Dockerfile',
-        live_update=[
-            # Sync source code changes (works for any structure)
-            sync(service_path, '/app'),
-            
-            # Language-specific restart triggers
-            # Restart on dependency file changes
-            run('npm install || pip install -r requirements.txt || go mod download || true', 
-                trigger=[
-                    service_path + '/package.json',
-                    service_path + '/requirements.txt',
-                    service_path + '/go.mod',
-                    service_path + '/composer.json'
-                ]),
-        ],
-        ignore=['node_modules', '.git', 'vendor', '__pycache__', 'dist', 'coverage', '.pytest_cache']
-    )
+    # Check if service has its own Tiltfile
+    service_tiltfile = service_path + '/Tiltfile'
+    has_service_tiltfile = str(local('test -f "%s" && echo "1" || echo "0"' % service_tiltfile, quiet=True)).strip() == "1"
     
-    # Apply Kubernetes manifests via Kustomize
-    k8s_yaml(kustomize(service_path + '/k8s/overlays/dev'))
-    
-    # Configure resource with dependencies on infrastructure
-    k8s_resource(
-        service_name,
-        resource_deps=['citus-coordinator', 'redis', 'redpanda', 'loki'],
-        labels=[service_name]
-    )
+    if has_service_tiltfile:
+        # Load service-specific Tiltfile
+        print("  ✓ Loading service-specific Tiltfile")
+        load_dynamic(service_tiltfile)
+    else:
+        # Fallback: generic configuration
+        print("  ⚠ No Tiltfile found, using generic configuration")
+        
+        # Generic docker build
+        docker_build(
+            service_name,
+            service_path,
+            dockerfile=service_path + '/Dockerfile',
+            live_update=[
+                sync(service_path, '/app'),
+            ],
+            ignore=['node_modules', '.git', 'vendor', '__pycache__', 'dist', 'build', 'target']
+        )
+        
+        # Apply K8s manifests
+        k8s_yaml(kustomize(service_path + '/k8s/overlays/dev'))
+        
+        # Configure resource
+        k8s_resource(
+            service_name,
+            resource_deps=['citus-coordinator', 'redis', 'redpanda', 'loki'],
+            labels=[service_name]
+        )
     
     print("  ✓ Configured: " + service_name)
 

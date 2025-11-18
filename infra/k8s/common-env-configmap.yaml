@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-env
+  namespace: dev-infra
+  labels:
+    app: infrastructure
+    managed-by: tilt
+data:
+  # PostgreSQL/Citus
+  DATABASE_URL: "postgresql://app:app@citus-coordinator.dev-infra.svc.cluster.local:5432/app"
+  POSTGRES_HOST: "citus-coordinator.dev-infra.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "app"
+  POSTGRES_PASSWORD: "app"
+  POSTGRES_DB: "app"
+  
+  # Redis
+  REDIS_URL: "redis://redis.dev-infra.svc.cluster.local:6379"
+  REDIS_HOST: "redis.dev-infra.svc.cluster.local"
+  REDIS_PORT: "6379"
+  
+  # Kafka (Redpanda)
+  KAFKA_BROKERS: "redpanda.dev-infra.svc.cluster.local:9092"
+  KAFKA_BOOTSTRAP_SERVERS: "redpanda.dev-infra.svc.cluster.local:9092"
+  
+  # Schema Registry
+  SCHEMA_REGISTRY_URL: "http://schema-registry.dev-infra.svc.cluster.local:8081"
+  
+  # Observability
+  LOKI_URL: "http://loki.dev-infra.svc.cluster.local:3100"
+  GRAFANA_URL: "http://grafana.dev-infra.svc.cluster.local:3000"
+  
+  # Environment
+  NODE_ENV: "development"
+  GO_ENV: "development"
+  PYTHON_ENV: "development"
+  PHP_ENV: "development"
