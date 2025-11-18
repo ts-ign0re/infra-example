@@ -7,14 +7,14 @@
 dev_mode = os.getenv('DEV_MODE', 'false') == 'true'
 
 if dev_mode:
-    print("🔥 DEV_MODE enabled - Using HMR-enabled images")
+    print("DEV_MODE enabled - Using HMR-enabled images")
 else:
-    print("📦 Production mode - Using optimized images")
+    print("Production mode - Using optimized images")
 
 # ============================================
 # 1. INFRASTRUCTURE RESOURCES
 # ============================================
-print("📦 Loading infrastructure resources...")
+print("Loading infrastructure resources...")
 
 k8s_yaml([
   'k8s/common-env-configmap.yaml',
@@ -41,6 +41,28 @@ k8s_resource('schema-registry',
     labels=['infrastructure']
 )
 
+# ============================================
+# AUTO-REGISTER AVRO SCHEMAS
+# ============================================
+print("Setting up automatic Avro schema registration...")
+
+# Local resource to register schemas after Schema Registry is ready
+local_resource(
+    'register-schemas',
+    cmd='USE_K8S=1 K8S_NAMESPACE=dev-infra bash scripts/register-schemas.sh',
+    dir='.',
+    resource_deps=['schema-registry'],
+    labels=['infrastructure'],
+    auto_init=True,
+    trigger_mode=TRIGGER_MODE_AUTO,
+)
+
+print("  Schemas will be auto-registered on startup")
+
+# ============================================
+# CONTINUE WITH OTHER INFRASTRUCTURE
+# ============================================
+
 k8s_resource('redis', 
     port_forwards=[port_forward(6379, 6379)],
     labels=['infrastructure']
@@ -58,6 +80,29 @@ k8s_resource('citus-worker',
 k8s_resource('citus-init',
     labels=['infrastructure']
 )
+
+# ============================================
+# AUTO-APPLY DATABASE MIGRATIONS
+# ============================================
+print("Setting up automatic database migrations...")
+
+# Local resource to apply migrations after Citus is ready
+# Note: Script includes readiness check with retry logic
+local_resource(
+    'apply-migrations',
+    cmd='USE_K8S=1 K8S_NAMESPACE=dev-infra bash scripts/migrate.sh',
+    dir='.',
+    resource_deps=['citus-coordinator', 'citus-worker', 'citus-init'],  # Wait for Citus fully initialized
+    labels=['infrastructure'],
+    auto_init=True,
+    trigger_mode=TRIGGER_MODE_AUTO,
+)
+
+print("  Migrations will be auto-applied on startup")
+
+# ============================================
+# OBSERVABILITY STACK
+# ============================================
 
 # Observability stack with proper resource grouping
 k8s_resource('loki', 
@@ -91,7 +136,7 @@ k8s_resource('grafana',
 # ============================================
 # 2. AUTO-DISCOVER MICROSERVICES
 # ============================================
-print("🔍 Auto-discovering services in ../packages/...")
+print("Auto-discovering services in ../packages/...")
 
 def discover_services():
     """
@@ -129,9 +174,9 @@ def discover_services():
                 'dockerfile': dockerfile,
                 'kustomization': kustomization
             })
-            print("  ✓ Found service: " + item)
+            print("  Found service: " + item)
         else:
-            print("  ⊘ Skipped " + item + " (missing Dockerfile or kustomization.yaml)")
+            print("  Skipped " + item + " (missing Dockerfile or kustomization.yaml)")
     
     return services
 
@@ -141,13 +186,13 @@ services = discover_services()
 # ============================================
 # 3. CONFIGURE DISCOVERED SERVICES
 # ============================================
-print("\n🚀 Configuring " + str(len(services)) + " service(s)...")
+print("\nConfiguring " + str(len(services)) + " service(s)...")
 
 for service in services:
     service_name = service['name']
     service_path = service['path']
     
-    print("\n📦 Setting up: " + service_name)
+    print("\nSetting up: " + service_name)
     
     # Check if service has its own Tiltfile
     service_tiltfile = service_path + '/Tiltfile'
@@ -155,7 +200,7 @@ for service in services:
     
     if has_service_tiltfile:
         # Load service-specific Tiltfile
-        print("  ✓ Loading service-specific Tiltfile")
+        print("  -> Loading service-specific Tiltfile")
         load_dynamic(service_tiltfile)
     else:
         # Fallback: generic configuration with DEV_MODE support
@@ -168,10 +213,10 @@ for service in services:
         # Choose dockerfile based on DEV_MODE
         if dev_mode and has_dockerfile_dev:
             dockerfile = dockerfile_dev
-            print("  ✓ Using Dockerfile.dev for HMR")
+            print("  -> Using Dockerfile.dev for HMR")
         else:
             dockerfile = service_path + '/Dockerfile'
-            print("  ✓ Using production Dockerfile")
+            print("  -> Using production Dockerfile")
         
         # Generic docker build with tag that matches kustomization.yaml
         docker_build(
@@ -194,16 +239,16 @@ for service in services:
             labels=[service_name]
         )
     
-    print("  ✓ Configured: " + service_name)
+    print("  -> Configured: " + service_name)
 
 # ============================================
 # 4. SUMMARY
 # ============================================
 print("\n" + "="*50)
-print("✅ Tilt configuration complete!")
+print("Tilt configuration complete")
 print("="*50)
-print("📊 Infrastructure: 9 services")
-print("🚀 Microservices: " + str(len(services)))
+print("Infrastructure: 9 services")
+print("Microservices: " + str(len(services)))
 print("\n🌐 Access Tilt UI: http://localhost:10350")
 print("📖 Docs: ../docs/SERVICES_GUIDE.md")
 print("="*50)

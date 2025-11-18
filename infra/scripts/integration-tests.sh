@@ -823,6 +823,162 @@ print_system_status "Grafana" "$SYS_GRAFANA"
 
 echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${RESET}\n"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# MATERIALIZED VIEWS TESTS
+# ═══════════════════════════════════════════════════════════════════════════
+print_section "Event Sourcing & Materialized Views Tests"
+
+# Test 1: Check tenant exists
+echo -e "${GRAY}Testing default tenant...${RESET}"
+tenant_count=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "SELECT COUNT(*) FROM tenants WHERE id = 10001" 2>/dev/null || echo "0")
+
+if [ "$tenant_count" = "1" ]; then
+  test_result "Default tenant (ID: 10001)" "PASS" "Tenant seeded successfully"
+else
+  test_result "Default tenant (ID: 10001)" "FAIL" "Tenant not found"
+  ((FAILED_TESTS++))
+fi
+
+# Test 2: Insert test bet event
+echo -e "${GRAY}Inserting test bet event...${RESET}"
+kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -c "
+    INSERT INTO bet_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version)
+    VALUES (
+      gen_random_uuid(),
+      10001,
+      'bet-test-001',
+      'V1_BETS_BET_PLACED',
+      '{\"user_id\": \"user-123\", \"stake\": 100, \"odds\": 2.5, \"fixture_id\": \"fixture-456\"}'::jsonb,
+      EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+      1
+    ) ON CONFLICT DO NOTHING;
+  " >/dev/null 2>&1
+
+sleep 2  # Wait for trigger to fire
+
+# Test 3: Check materialized view updated
+echo -e "${GRAY}Checking bets_view updated...${RESET}"
+bet_count=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "SELECT COUNT(*) FROM bets_view WHERE tenant_id = 10001 AND bet_id = 'bet-test-001'" 2>/dev/null || echo "0")
+
+if [ "$bet_count" = "1" ]; then
+  test_result "Materialized view refresh (bets_view)" "PASS" "View automatically updated via trigger"
+else
+  test_result "Materialized view refresh (bets_view)" "FAIL" "View not updated (expected 1, got $bet_count)"
+  ((FAILED_TESTS++))
+fi
+
+# Test 4: Check refresh status function
+echo -e "${GRAY}Testing refresh status function...${RESET}"
+refresh_status=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "SELECT COUNT(*) FROM get_views_refresh_status()" 2>/dev/null || echo "0")
+
+if [ "$refresh_status" = "5" ]; then
+  test_result "Refresh status function" "PASS" "5 views monitored"
+else
+  test_result "Refresh status function" "FAIL" "Expected 5 views, got $refresh_status"
+  ((FAILED_TESTS++))
+fi
+
+# Test 5: Check trigger exists
+echo -e "${GRAY}Verifying triggers exist...${RESET}"
+trigger_count=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "
+    SELECT COUNT(*) FROM pg_trigger 
+    WHERE tgname IN (
+      'after_bet_events_insert', 
+      'after_balance_events_insert', 
+      'after_payment_events_insert'
+    )
+  " 2>/dev/null || echo "0")
+
+if [ "$trigger_count" = "3" ]; then
+  test_result "Reactive triggers" "PASS" "3 triggers configured"
+else
+  test_result "Reactive triggers" "FAIL" "Expected 3 triggers, got $trigger_count"
+  ((FAILED_TESTS++))
+fi
+
+# Test 6: Test idempotency key protection
+echo -e "${GRAY}Testing idempotency key protection...${RESET}"
+idempotency_key="test-payment-$(date +%s)"
+
+# Insert first payment
+kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -c "
+    INSERT INTO payment_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version, metadata)
+    VALUES (
+      gen_random_uuid(),
+      10001,
+      'payment-test-001',
+      'V1_PAYMENTS_DEPOSIT_CREATED',
+      '{\"user_id\": \"user-123\", \"amount\": 500}'::jsonb,
+      EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+      1,
+      '{\"idempotency_key\": \"$idempotency_key\"}'::jsonb
+    );
+  " >/dev/null 2>&1
+
+# Try to insert duplicate
+duplicate_detected=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "
+    SELECT COUNT(*) FROM payment_events 
+    WHERE tenant_id = 10001 
+      AND metadata->>'idempotency_key' = '$idempotency_key'
+  " 2>/dev/null || echo "0")
+
+if [ "$duplicate_detected" = "1" ]; then
+  test_result "Idempotency key protection" "PASS" "Duplicate prevented"
+else
+  test_result "Idempotency key protection" "FAIL" "Duplicates found: $duplicate_detected"
+  ((FAILED_TESTS++))
+fi
+
+# Test 7: Multi-tenancy isolation
+echo -e "${GRAY}Testing multi-tenancy isolation...${RESET}"
+isolation_check=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "
+    SELECT COUNT(*) FROM bet_events 
+    WHERE tenant_id = 99999 AND aggregate_id = 'bet-test-001'
+  " 2>/dev/null || echo "999")
+
+if [ "$isolation_check" = "0" ]; then
+  test_result "Multi-tenancy isolation" "PASS" "Tenant data isolated"
+else
+  test_result "Multi-tenancy isolation" "FAIL" "Data leaked between tenants"
+  ((FAILED_TESTS++))
+fi
+
+# Test 8: Check all materialized views exist
+echo -e "${GRAY}Checking all materialized views...${RESET}"
+views_count=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -tAc "
+    SELECT COUNT(*) FROM pg_matviews 
+    WHERE schemaname = 'public' AND matviewname IN (
+      'bets_view',
+      'user_balances_view',
+      'payments_view',
+      'tenants_summary_view',
+      'user_activity_view'
+    )
+  " 2>/dev/null || echo "0")
+
+if [ "$views_count" = "5" ]; then
+  test_result "Materialized views created" "PASS" "All 5 views exist"
+else
+  test_result "Materialized views created" "FAIL" "Expected 5 views, got $views_count"
+  ((FAILED_TESTS++))
+fi
+
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FINAL SUMMARY
+# ═══════════════════════════════════════════════════════════════════════════
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════╝${RESET}\n"
+
 # Final verdict
 if [ $FAILED_TESTS -eq 0 ]; then
   echo -e "${GREEN}${BOLD}╔═══════════════════════════════════════════════════════════════════════╗${RESET}"

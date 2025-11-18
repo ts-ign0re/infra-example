@@ -22,6 +22,15 @@ DEV_MODE=true make tilt-up
 open http://localhost:10350
 ```
 
+**Что происходит автоматически:**
+- Создается namespace `dev-infra`
+- Разворачивается инфраструктура (PostgreSQL, Redis, Kafka, Loki, Grafana)
+- Применяются миграции БД (автоматически после готовности PostgreSQL)
+- Регистрируются Avro схемы (автоматически после готовности Schema Registry)
+- Запускаются все микросервисы
+
+Полное время старта: **~30-90 секунд**
+
 ## Как это работает
 
 1. **Tilt запускает кластер** с инфраструктурой (Postgres, Redis, Kafka, Loki)
@@ -337,6 +346,7 @@ kubectl rollout restart deployment/my-service -n dev-infra
 ## См. также
 
 - **Следующий шаг:** [02. Быстрый старт](02-QUICKSTART.md) - Как подключиться к сервисам
+- [13. Автоматическая инициализация](13-TILT-INITIALIZATION.md) - Что происходит при `make tilt-up`
 - [03. Переменные окружения](03-ENVIRONMENT-VARS.md) - Environment variables
 - [04. Руководство по Tiltfile](04-TILTFILE-GUIDE.md) - Настройка Tilt
 - [05. Руководство по сервисам](05-SERVICES-GUIDE.md) - Гайд по сервисам

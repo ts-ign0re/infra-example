@@ -6,15 +6,25 @@
 
 ## Проверка что всё работает
 
-После `make tilt-up` и `make infra-wait` у вас должна работать инфраструктура. Проверим:
+После `make tilt-up` инфраструктура автоматически инициализируется:
+- Применяются миграции БД
+- Регистрируются Avro схемы
+- Создается дефолтный тенант (ID: 10001)
+
+Проверим статус:
 
 ```bash
-# Проверка всех сервисов
+# Проверка всех сервисов (опционально)
 make infra-test
 
-# Проверка регистрации схем
-make register-schemas
+# Проверка что схемы зарегистрированы
+kubectl -n dev-infra exec deploy/schema-registry -- curl -s http://localhost:8081/subjects
+
+# Проверка что тенант создан
+kubectl -n dev-infra exec -i deploy/citus-coordinator -- psql -U app -d app -c "SELECT * FROM tenants;"
 ```
+
+> **Примечание:** Команды `make infra-wait` и `make register-schemas` больше не нужны - все происходит автоматически!
 
 ---
 
@@ -204,14 +214,17 @@ open http://localhost:10350
 
 **"Database does not exist":**
 ```bash
-# Re-run init
-make infra-down && make tilt-up && make infra-wait
+# Re-run initialization
+make infra-down && make tilt-up
+# Миграции применятся автоматически
 ```
 
 **Schema Registry empty:**
 ```bash
-# Register schemas
-make register-schemas
+# Schemas register automatically on tilt-up
+# If needed, manually trigger:
+kubectl -n dev-infra port-forward svc/schema-registry 8081:8081 &
+USE_K8S=1 K8S_NAMESPACE=dev-infra bash infra/scripts/register-schemas.sh
 ```
 
 ---

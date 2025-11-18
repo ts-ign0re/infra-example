@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "TenantEvent",
+  "namespace": "io.platform.tenants",
+  "doc": "События управления тенантами",
+  "fields": [
+    { "name": "id", "type": "string", "doc": "Уникальный ID события (UUID)" },
+    { "name": "tenant_id", "type": "long", "doc": "ID тенанта" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID связанной сущности (tenant ID, user ID, etc)" },
+    { "name": "event_type", "type": "string", "doc": "Тип события: V1_TENANT_CREATED, V1_TENANT_UPDATED, V1_TENANT_DELETED, V1_TENANT_SUSPENDED, V1_TENANT_ACTIVATED" },
+    { "name": "event_data", "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] }, "doc": "Данные события" },
+    { "name": "timestamp", "type": "long", "doc": "Unix timestamp в миллисекундах" },
+    { "name": "version", "type": "int", "default": 1, "doc": "Версия схемы" },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null, "doc": "Дополнительные метаданные" }
+  ]
+}

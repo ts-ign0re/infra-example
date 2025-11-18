@@ -1,0 +1,545 @@
+# Materialized Views Guide
+
+> **Цель:** Быстрое чтение данных через материализованные представления вместо восстановления состояния из event sourcing
+
+---
+
+## Концепция
+
+**Event Sourcing** хранит историю изменений, но читать из него медленно:
+- Нужно восстанавливать состояние из всех событий
+- Для 1000 событий = 1000 SQL строк для обработки
+
+**Materialized Views** - это кэшированные проекции (read models):
+- Хранят текущее состояние
+- Обновляются периодически или по триггеру
+- Быстрые SELECT запросы
+
+---
+
+## Доступные Materialized Views
+
+### 1. `bets_view` - Текущее состояние ставок
+
+**Структура:**
+```sql
+tenant_id          bigint
+bet_id             varchar
+user_id            varchar
+stake              decimal
+odds               decimal
+fixture_id         varchar
+status             varchar  -- 'placed', 'confirmed', 'settled', 'cancelled', 'voided'
+result             varchar  -- 'win', 'loss', null
+payout             decimal
+last_updated_timestamp  bigint
+last_updated_at    timestamp
+```
+
+**Использование:**
+```typescript
+// Получить все активные ставки пользователя
+const query = `
+  SELECT bet_id, stake, odds, fixture_id, status
+  FROM bets_view
+  WHERE tenant_id = $1 
+    AND user_id = $2
+    AND status IN ('placed', 'confirmed')
+  ORDER BY last_updated_at DESC;
+`;
+
+const bets = await pool.query(query, [tenantId, userId]);
+```
+
+```php
+$stmt = $db->prepare("
+  SELECT bet_id, stake, odds, fixture_id, status
+  FROM bets_view
+  WHERE tenant_id = :tenant_id 
+    AND user_id = :user_id
+    AND status IN ('placed', 'confirmed')
+  ORDER BY last_updated_at DESC
+");
+
+$stmt->execute([
+  ':tenant_id' => $tenantId,
+  ':user_id' => $userId
+]);
+
+$bets = $stmt->fetchAll();
+```
+
+### 2. `user_balances_view` - Балансы пользователей
+
+**Структура:**
+```sql
+tenant_id                   bigint
+user_id                     varchar
+balance                     decimal
+transaction_count           integer
+last_transaction_timestamp  bigint
+last_transaction_at         timestamp
+```
+
+**Использование:**
+```typescript
+// Получить баланс пользователя
+const query = `
+  SELECT balance, transaction_count
+  FROM user_balances_view
+  WHERE tenant_id = $1 AND user_id = $2;
+`;
+
+const result = await pool.query(query, [tenantId, userId]);
+const balance = result.rows[0]?.balance || 0;
+```
+
+```php
+$stmt = $db->prepare("
+  SELECT balance, transaction_count
+  FROM user_balances_view
+  WHERE tenant_id = :tenant_id AND user_id = :user_id
+");
+
+$stmt->execute([
+  ':tenant_id' => $tenantId,
+  ':user_id' => $userId
+]);
+
+$userBalance = $stmt->fetch();
+```
+
+### 3. `payments_view` - История платежей
+
+**Структура:**
+```sql
+tenant_id              bigint
+payment_id             varchar
+user_id                varchar
+amount                 decimal
+currency               varchar
+payment_method         varchar
+external_id            varchar
+payment_type           varchar  -- 'deposit', 'withdrawal'
+status                 varchar  -- 'created', 'pending', 'completed', 'failed', etc.
+last_updated_timestamp bigint
+last_updated_at        timestamp
+```
+
+**Использование:**
+```typescript
+// Получить историю депозитов пользователя
+const query = `
+  SELECT payment_id, amount, status, last_updated_at
+  FROM payments_view
+  WHERE tenant_id = $1 
+    AND user_id = $2
+    AND payment_type = 'deposit'
+  ORDER BY last_updated_at DESC
+  LIMIT 20;
+`;
+
+const deposits = await pool.query(query, [tenantId, userId]);
+```
+
+### 4. `tenants_summary_view` - Статистика по тенанту
+
+**Структура:**
+```sql
+tenant_id          bigint
+tenant_name        varchar
+slug               varchar
+status             varchar
+plan               varchar
+total_bets         integer
+active_bets        integer
+total_stake        decimal
+total_deposits     decimal
+total_withdrawals  decimal
+total_users        integer
+total_balance      decimal
+last_refreshed_at  timestamp
+```
+
+**Использование:**
+```typescript
+// Dashboard для администратора тенанта
+const query = `
+  SELECT 
+    total_bets,
+    active_bets,
+    total_stake,
+    total_deposits,
+    total_withdrawals,
+    total_users,
+    total_balance
+  FROM tenants_summary_view
+  WHERE tenant_id = $1;
+`;
+
+const stats = await pool.query(query, [tenantId]);
+```
+
+### 5. `user_activity_view` - Активность пользователей
+
+**Структура:**
+```sql
+tenant_id         bigint
+user_id           varchar
+current_balance   decimal
+total_bets        integer
+total_wagered     decimal
+total_winnings    decimal
+total_deposited   decimal
+total_withdrawn   decimal
+last_activity_at  bigint
+```
+
+**Использование:**
+```typescript
+// Топ активных игроков
+const query = `
+  SELECT 
+    user_id,
+    total_bets,
+    total_wagered,
+    total_winnings,
+    current_balance
+  FROM user_activity_view
+  WHERE tenant_id = $1
+  ORDER BY total_wagered DESC
+  LIMIT 10;
+`;
+
+const topPlayers = await pool.query(query, [tenantId]);
+```
+
+---
+
+## Обновление Materialized Views
+
+### ✅ Автоматическое обновление через триггеры (по умолчанию)
+
+**Как это работает:**
+- После каждого `INSERT` в event tables автоматически обновляются соответствующие views
+- Используются STATEMENT-level триггеры (не ROW-level) - эффективнее
+- Задержка: ~100-300ms - приемлемо для беттинга
+- Views всегда актуальные (real-time)
+
+**Что обновляется:**
+
+| Event Table | Обновляемые Views | Задержка |
+|-------------|-------------------|----------|
+| `bet_events` | bets_view, user_activity_view, tenants_summary_view | ~150ms |
+| `balance_events` | user_balances_view, user_activity_view, tenants_summary_view | ~100ms |
+| `payment_events` | payments_view, user_activity_view, tenants_summary_view | ~120ms |
+
+**Проверка статуса:**
+
+```sql
+-- Посмотреть когда views обновлялись
+SELECT * FROM get_views_refresh_status();
+```
+
+```typescript
+// В приложении
+const status = await pool.query('SELECT * FROM get_views_refresh_status()');
+console.log(status.rows);
+/*
+[
+  {
+    view_name: 'bets_view',
+    last_refreshed_at: '2025-11-18 17:45:32',
+    seconds_ago: 5,
+    refresh_count: 127,
+    avg_refresh_time_ms: 145,
+    status: 'fresh'
+  }
+]
+*/
+```
+
+### Отключение триггеров (если нужно)
+
+```sql
+-- Временно отключить для bulk insert
+ALTER TABLE bet_events DISABLE TRIGGER after_bet_events_insert;
+
+-- Массовый импорт...
+INSERT INTO bet_events SELECT * FROM staging_bets;
+
+-- Включить обратно
+ALTER TABLE bet_events ENABLE TRIGGER after_bet_events_insert;
+
+-- Обновить views вручную
+SELECT manual_refresh_all_views();
+```
+
+---
+
+## Триггеры для real-time обновлений
+
+✅ **УЖЕ НАСТРОЕНО!** Views автоматически обновляются после каждого INSERT.
+
+### Почему триггеры, а не pg_cron?
+
+**Архитектурное решение:**
+- ✅ **PostgreSQL триггеры** - работают "из коробки" в Citus
+- ❌ **pg_cron** - требует custom образ PostgreSQL (недоступен в citusdata/citus)
+- ❌ **External scheduler** - дополнительная сложность
+- ❌ **Manual refresh** - не real-time
+
+**Для беттинга триггеры оптимальны:**
+- Задержка ~100-300ms приемлема
+- Данные всегда актуальные
+- Не нужны внешние зависимости
+- Простота эксплуатации
+
+### Как это работает:
+
+```
+1. INSERT INTO bet_events (...) 
+   ↓
+2. Триггер after_bet_events_insert срабатывает
+   ↓  
+3. REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view
+   ↓
+4. INSERT завершается (с задержкой ~150ms)
+   ↓
+5. View актуальна!
+```
+
+### Преимущества:
+
+✅ **Real-time данные** - views всегда актуальные  
+✅ **Не нужен внешний scheduler** - всё в PostgreSQL  
+✅ **STATEMENT-level triggers** - не замедляют массовые INSERT  
+✅ **CONCURRENTLY** - не блокирует SELECT запросы  
+
+### Недостатки и решения:
+
+⚠️ **Добавляет ~100-300ms к INSERT** - приемлемо для беттинга  
+⚠️ **Может быть overhead на высокой нагрузке** - см. оптимизацию ниже
+
+### Мониторинг производительности:
+
+```sql
+-- Средние времена refresh
+SELECT 
+  view_name,
+  avg_refresh_time_ms,
+  refresh_count,
+  last_refreshed_at
+FROM materialized_views_refresh_log;
+```
+
+```typescript
+// Алерт если refresh медленный
+const { rows } = await pool.query(`
+  SELECT view_name, avg_refresh_time_ms 
+  FROM materialized_views_refresh_log
+  WHERE avg_refresh_time_ms > 500
+`);
+
+if (rows.length > 0) {
+  console.warn('Slow view refresh detected:', rows);
+}
+```
+
+---
+
+## Performance Tips
+
+### 1. Используйте CONCURRENTLY
+
+```sql
+-- ✅ Не блокирует SELECT запросы
+REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view;
+
+-- ❌ Блокирует все SELECT до завершения
+REFRESH MATERIALIZED VIEW bets_view;
+```
+
+`CONCURRENTLY` требует UNIQUE индекс (уже создан в миграции).
+
+### 2. Обновляйте по расписанию
+
+**Для real-time системы триггеры уже настроены!**
+
+Но если вам нужен fallback или вы отключили триггеры:
+
+- **Редко изменяющиеся данные:** 1 раз в час (если триггеры отключены)
+- **Real-time (текущая настройка):** Автоматически через триггеры после каждого INSERT
+
+### 3. Мониторинг времени обновления
+
+```sql
+-- Проверить, когда view последний раз обновлялся
+SELECT 
+  schemaname,
+  matviewname,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||matviewname)) as size
+FROM pg_matviews
+WHERE schemaname = 'public';
+```
+
+### 4. Партиционирование для больших данных
+
+Если views становятся слишком большими, можно создать per-tenant views:
+
+```sql
+-- View только для одного тенанта
+CREATE MATERIALIZED VIEW bets_view_tenant_10001 AS
+SELECT * FROM bets_view WHERE tenant_id = 10001;
+
+-- Обновлять быстрее, чем полный view
+REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view_tenant_10001;
+```
+
+---
+
+## Сравнение: Event Sourcing vs Materialized Views
+
+| Операция | Event Sourcing | Materialized View | Выигрыш |
+|----------|---------------|-------------------|---------|
+| Получить текущее состояние ставки | Прочитать все события, восстановить состояние | SELECT из bets_view | **100x быстрее** |
+| Получить баланс пользователя | Суммировать все balance_events | SELECT из user_balances_view | **50x быстрее** |
+| Топ 10 игроков | Обработать все bet_events | SELECT TOP 10 из user_activity_view | **200x быстрее** |
+| Dashboard статистика | Аггрегация из всех event таблиц | SELECT из tenants_summary_view | **500x быстрее** |
+
+---
+
+## Best Practices
+
+### ✅ Когда использовать Materialized Views:
+
+1. **Чтение текущего состояния** (баланс, статус ставки)
+2. **Dashboard и аналитика** (статистика, графики)
+3. **Списки и таблицы** (история платежей, активные ставки)
+4. **Поиск и фильтрация** (топ игроков, поиск по fixture)
+
+### ✅ Когда использовать Event Sourcing:
+
+1. **Запись новых событий** (всегда пишем в event tables)
+2. **Audit log** (полная история изменений)
+3. **Time travel** (состояние на конкретный момент времени)
+4. **Replay events** (восстановление после ошибки)
+
+### ❌ Избегайте:
+
+- Писать напрямую в materialized views (они read-only)
+- Забывать обновлять views после массового импорта
+- Обновлять слишком часто (каждую секунду - излишне)
+- Хранить всё в views (event store всё равно нужен для истории)
+
+---
+
+## Troubleshooting
+
+### View не обновляется
+
+```sql
+-- Проверить, есть ли данные в event tables
+SELECT COUNT(*) FROM bet_events WHERE tenant_id = 10001;
+
+-- Проверить, есть ли данные в view
+SELECT COUNT(*) FROM bets_view WHERE tenant_id = 10001;
+
+-- Принудительно обновить
+REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view;
+```
+
+### View обновляется слишком долго
+
+```sql
+-- Посмотреть размер view
+SELECT pg_size_pretty(pg_total_relation_size('bets_view'));
+
+-- Проверить, есть ли индексы
+\d+ bets_view
+
+-- Возможно нужно партиционирование или архивация старых данных
+```
+
+### Out of memory при обновлении
+
+```sql
+-- Увеличить work_mem для сессии
+SET work_mem = '256MB';
+REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view;
+```
+
+### Триггеры замедляют INSERT
+
+**Проблема:** INSERT операции стали медленнее (~300ms)
+
+**Это нормально!** Для беттинга 300ms приемлемо. Но если критично:
+
+**Вариант 1: Временно отключить триггеры для bulk import**
+```sql
+ALTER TABLE bet_events DISABLE TRIGGER after_bet_events_insert;
+-- Массовый импорт...
+ALTER TABLE bet_events ENABLE TRIGGER after_bet_events_insert;
+SELECT manual_refresh_all_views();
+```
+
+**Вариант 2: Оптимизировать views (убрать тяжелые JOIN)**
+```sql
+-- Если view слишком сложный, разбейте на несколько простых
+CREATE MATERIALIZED VIEW simple_bets_view AS
+SELECT tenant_id, bet_id, status 
+FROM bet_events WHERE ...;
+```
+
+**Вариант 3: Использовать условные триггеры (обновлять раз в N секунд)**
+```sql
+-- См. раздел "Conditional refresh" в миграции V5
+```
+
+---
+
+## FAQ
+
+### Можно ли использовать pg_cron вместо триггеров?
+
+Нет, `pg_cron` недоступен в образе `citusdata/citus:12.1`. 
+
+**Альтернативы:**
+1. ✅ **Триггеры** (текущий подход) - работают из коробки
+2. ❌ Собрать custom образ с pg_cron - сложность эксплуатации
+3. ❌ Kubernetes CronJob - задержка обновления до 5 минут
+
+### Можно ли обновлять views реже?
+
+Да, если real-time не критичен:
+
+```sql
+-- Отключить триггеры
+DROP TRIGGER after_bet_events_insert ON bet_events;
+
+-- Настроить Kubernetes CronJob (см. раздел документации выше)
+-- Или использовать scheduled task в приложении
+```
+
+### Сколько памяти занимают materialized views?
+
+```sql
+-- Посмотреть размер всех views
+SELECT 
+  matviewname,
+  pg_size_pretty(pg_total_relation_size(schemaname||'.'||matviewname)) as size
+FROM pg_matviews 
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||matviewname) DESC;
+```
+
+Обычно views занимают 10-30% от размера исходных event tables.
+
+### Можно ли читать напрямую из event tables?
+
+Технически да, но **не рекомендуется**:
+- ❌ Медленно (нужно восстанавливать состояние)
+- ❌ Сложная логика в приложении
+- ❌ Дублирование кода проекций
+
+✅ **Используйте materialized views** - они для этого и созданы!

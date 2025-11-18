@@ -107,6 +107,21 @@ infra-test:
 	fi
 
 # ============================================
+# EVENT SOURCING TESTS
+# ============================================
+
+event-sourcing-test:
+	@echo "Ensuring migrations are applied..."
+	@$(MAKE) migrate > /dev/null 2>&1 || true
+	@echo "Registering Avro schemas before tests..."
+	@$(MAKE) register-schemas > /dev/null 2>&1 || true
+	@if [ "$(USE_DOCKER)" = "1" ]; then \
+		bash $(INFRA_DIR)/scripts/test-event-sourcing.sh ; \
+	else \
+		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/test-event-sourcing.sh ; \
+	fi
+
+# ============================================
 # SERVICE MANAGEMENT
 # ============================================
 
@@ -146,4 +161,3 @@ check-env:
 
 .PHONY: help
 help:
-
