@@ -22,8 +22,8 @@
    - `redis` — кеш.
    - `postgres` — БД.
    - `flyway` — контейнер для миграций.
-   - `cytus` — сервис с дефолтным шардом.
-   - `cytus-init` — post-start инициализация дефолтного тенанта/шарда.
+   - `citus` — сервис с дефолтным шардом.
+   - `citus-init` — post-start инициализация дефолтного тенанта/шарда.
 2. Для каждого сервиса прописать `healthcheck` и использовать переменные окружения.
 3. Создать `infra/Tiltfile` с вызовом `docker_compose('./docker-compose.yml')`.
 4. Создать `infra/flyway.conf` с параметрами миграций (ссылками на переменные окружения).
@@ -35,7 +35,7 @@
 ## 3. Переменные окружения
 
 1. Создать `infra/.env.sample` с полным списком переменных:
-   - параметры PostgreSQL, Redis, Redpanda, Schema Registry, Cytus, Flyway.
+   - параметры PostgreSQL, Redis, Redpanda, Schema Registry, Citus, Flyway.
    - опциональные локальные URL.
 2. Добавить `infra/.env.sample` в репозиторий.
 3. Создать `infra/.env` (вручную или автоматически) и добавить в `.gitignore`.
@@ -45,21 +45,20 @@
 
 Для каждого скрипта сделать `chmod +x` и обеспечить чтение `.env`.
 
-1. `wait-for-infra.sh` — ожидание готовности всех сервисов (Postgres, Redis, Redpanda, Schema Registry, Cytus).
-2. `integration-tests.sh` — smoke-тесты:
+1. `wait-for-infra.sh` — ожидание готовности всех сервисов (Postgres, Redis, Redpanda, Schema Registry, Citus).
+2. `infra/tests/integration-tests.sh` — smoke-тесты (запускается через `make infra-test`):
    - проверка операций в Postgres и Redis.
-   - проверка топиков Redpanda (`rpk`), доступности Schema Registry и Cytus.
+   - проверка топиков Redpanda (`rpk`), доступности Schema Registry и Citus.
 3. `migrate.sh` — запуск Flyway миграций внутри Docker Compose.
 4. `register-schemas.sh` — регистрация всех Avro-схем в Schema Registry.
 5. `generate-types-ts.sh` — генерация TypeScript типов (через `avro-to-typescript`) в каталог Node.js-сабмодуля.
 6. `generate-types-php.sh` — генерация PHP-классов (через `quicktype`) в каталог PHP-сабмодуля.
-7. `generate-types.sh` — интерактивный выбор доступного сабмодуля и запуск соответствующего скрипта.
 
 ## 5. Типизация событий Redpanda
 
 1. Определить Avro-схемы в `infra/schemas/*.avsc` для всех доменных событий.
 2. Организовать регистрацию схем через `make register-schemas` (см. раздел Makefile).
-3. Настроить обработку схем в Cytus и всех потребителях/продюсерах:
+3. Настроить обработку схем в Citus и всех потребителях/продюсерах:
    - использовать URL Schema Registry из `.env`;
    - гарантировать сериализацию и десериализацию через Avro.
 4. Гайдлайны по именованию событий (Единый формат):
@@ -145,7 +144,7 @@
 
 ## 9. Поддержка и развитие
 
-1. Назначить ответственного за обновление инфраструктурных образов (Postgres, Redis, Redpanda, Schema Registry, Cytus, Flyway).
+1. Назначить ответственного за обновление инфраструктурных образов (Postgres, Redis, Redpanda, Schema Registry, Citus, Flyway).
 2. Ввести правила версионирования Avro-схем (semver, обратная совместимость).
 3. Обновлять документацию при каждом изменении инфраструктуры.
 4. Регулярно проверять выполнение smoke-тестов и миграций на свежей копии репозитория.
