@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+
+resources:
+  - ../../base
+
+# Production-specific patches
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: REPLACE_SERVICE_NAME
+      spec:
+        replicas: 3  # HA for production
+        template:
+          spec:
+            containers:
+            - name: REPLACE_SERVICE_NAME
+              env:
+              - name: NODE_ENV
+                value: "production"
+              - name: LOG_LEVEL
+                value: "info"
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "200m"
+                limits:
+                  memory: "1Gi"
+                  cpu: "1000m"
+
+# Production image from registry (set by CI/CD)
+images:
+  - name: REPLACE_SERVICE_NAME
+    newName: registry.example.com/REPLACE_SERVICE_NAME
+    newTag: latest  # Will be replaced by CI/CD

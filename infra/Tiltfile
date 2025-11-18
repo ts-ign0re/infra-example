@@ -1,5 +1,13 @@
-# Tilt for Kubernetes dev
-# Load all k8s resources
+# ============================================
+# IDEAS PLATFORM - TILT CONFIGURATION
+# Auto-discovers services in ../packages/
+# ============================================
+
+# ============================================
+# 1. INFRASTRUCTURE RESOURCES
+# ============================================
+print("📦 Loading infrastructure resources...")
+
 k8s_yaml([
   'k8s/redpanda.yaml',
   'k8s/schema-registry.yaml',
@@ -12,12 +20,144 @@ k8s_yaml([
   'k8s/observability/grafana.yaml',
 ])
 
+# Configure infrastructure resources
 redpanda_ports = [port_forward(19092, 9092), port_forward(9644, 9644)]
 k8s_resource('redpanda', port_forwards=redpanda_ports)
 k8s_resource('schema-registry', port_forwards=[port_forward(8081, 8081)], resource_deps=['redpanda'])
 k8s_resource('redis', port_forwards=[port_forward(6379, 6379)])
 k8s_resource('citus-coordinator', port_forwards=[port_forward(5432, 5432)])
 k8s_resource('citus-worker')
-k8s_resource('loki', port_forwards=[port_forward(3100, 3100)])
-k8s_resource('promtail', resource_deps=['loki'])
-k8s_resource('grafana', port_forwards=[port_forward(3000, 3000)], resource_deps=['loki'])
+k8s_resource('citus-init')
+
+# Observability stack with proper resource grouping
+k8s_resource('loki', 
+    port_forwards=[port_forward(3100, 3100)],
+    objects=[
+        'loki-config:configmap'
+    ]
+)
+
+k8s_resource('promtail', 
+    resource_deps=['loki'],
+    objects=[
+        'promtail:serviceaccount',
+        'promtail:clusterrole',
+        'promtail:clusterrolebinding',
+        'promtail-config:configmap'
+    ]
+)
+
+k8s_resource('grafana', 
+    port_forwards=[port_forward(3000, 3000)], 
+    resource_deps=['loki'],
+    objects=[
+        'grafana-datasources:configmap'
+    ]
+)
+
+# ============================================
+# 2. AUTO-DISCOVER MICROSERVICES
+# ============================================
+print("🔍 Auto-discovering services in ../packages/...")
+
+def discover_services():
+    """
+    Auto-discover all services in ../packages/ directory
+    Criteria:
+    - Has Dockerfile in root
+    - Has k8s/overlays/dev/kustomization.yaml
+    """
+    services = []
+    packages_dir = '../packages'
+    
+    # List all items in packages/ using shell
+    items_output = str(local('ls -1 %s' % packages_dir, quiet=True))
+    items = [x.strip() for x in items_output.split('\n') if x.strip()]
+    
+    for item in items:
+        # Skip .template, hidden directories, and README
+        if item.startswith('.') or item == 'README.md':
+            continue
+        
+        service_path = packages_dir + '/' + item
+        
+        # Check for required files using shell test
+        dockerfile = service_path + '/Dockerfile'
+        kustomization = service_path + '/k8s/overlays/dev/kustomization.yaml'
+        
+        # Check if files exist
+        dockerfile_check = str(local('test -f "%s" && echo "1" || echo "0"' % dockerfile, quiet=True)).strip()
+        kustomization_check = str(local('test -f "%s" && echo "1" || echo "0"' % kustomization, quiet=True)).strip()
+        
+        if dockerfile_check == "1" and kustomization_check == "1":
+            services.append({
+                'name': item,
+                'path': service_path,
+                'dockerfile': dockerfile,
+                'kustomization': kustomization
+            })
+            print("  ✓ Found service: " + item)
+        else:
+            print("  ⊘ Skipped " + item + " (missing Dockerfile or kustomization.yaml)")
+    
+    return services
+
+# Discover all services
+services = discover_services()
+
+# ============================================
+# 3. CONFIGURE DISCOVERED SERVICES
+# ============================================
+print("\n🚀 Configuring " + str(len(services)) + " service(s)...")
+
+for service in services:
+    service_name = service['name']
+    service_path = service['path']
+    
+    print("\n📦 Setting up: " + service_name)
+    
+    # Build Docker image with live_update for hot-reload
+    docker_build(
+        service_name,
+        service_path,
+        dockerfile=service_path + '/Dockerfile',
+        live_update=[
+            # Sync source code changes (works for any structure)
+            sync(service_path, '/app'),
+            
+            # Language-specific restart triggers
+            # Restart on dependency file changes
+            run('npm install || pip install -r requirements.txt || go mod download || true', 
+                trigger=[
+                    service_path + '/package.json',
+                    service_path + '/requirements.txt',
+                    service_path + '/go.mod',
+                    service_path + '/composer.json'
+                ]),
+        ],
+        ignore=['node_modules', '.git', 'vendor', '__pycache__', 'dist', 'coverage', '.pytest_cache']
+    )
+    
+    # Apply Kubernetes manifests via Kustomize
+    k8s_yaml(kustomize(service_path + '/k8s/overlays/dev'))
+    
+    # Configure resource with dependencies on infrastructure
+    k8s_resource(
+        service_name,
+        resource_deps=['citus-coordinator', 'redis', 'redpanda', 'loki'],
+        labels=[service_name]
+    )
+    
+    print("  ✓ Configured: " + service_name)
+
+# ============================================
+# 4. SUMMARY
+# ============================================
+print("\n" + "="*50)
+print("✅ Tilt configuration complete!")
+print("="*50)
+print("📊 Infrastructure: 9 services")
+print("🚀 Microservices: " + str(len(services)))
+print("\n🌐 Access Tilt UI: http://localhost:10350")
+print("📖 Docs: ../docs/SERVICES_GUIDE.md")
+print("="*50)

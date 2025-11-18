@@ -1,34 +1,58 @@
-# Developer Infra Guide
+[🇷🇺 Русский](README.md) | [🇬🇧 English](README.en.md)
 
-## Prerequisites
+---
+
+# Руководство по инфраструктуре разработки
+
+> Единая инфраструктура разработки для платформы микросервисов
+
+## Требования
 
 - make, bash, curl, jq, kubectl
-- Local Kubernetes cluster (Docker Desktop Kubernetes, kind, или minikube)
+- Локальный Kubernetes кластер (Docker Desktop Kubernetes, kind, или minikube)
 - Docker (для образов и k8s)
 
-## Quick Start (Tilt + Kubernetes)
+## 📚 Документация
 
-На MacOS + установленный OrbStack + Активированный в настройках K8S не требуется ничего из нижеперечисленного. Достаточно выполнить команду `make tilt-up` и все заведется
+- **[Шпаргалка](docs/CHEATSHEET.md)** - Быстрый справочник команд ⚡
+- **[Руководство по сервисам](docs/SERVICES_GUIDE.md)** - Как создавать и разрабатывать микросервисы
+- **[Production Deployment](docs/PRODUCTION_DEPLOYMENT.md)** - Руководство по CI/CD и продакшен деплою
+- **[Спецификации архитектуры](docs/specs.md)** - Event sourcing, Kafka, архитектура БД
+- **[Быстрый старт](docs/ENV_QUICKSTART.md)** - Настройка окружения
+
+## Быстрый старт (Tilt + Kubernetes)
+
+На MacOS + установленный OrbStack + активированный в настройках K8S не требуется ничего из нижеперечисленного. Достаточно выполнить команду `make tilt-up` и все заведется
 
 1) Скопируйте окружение:
+   ```bash
    cp infra/.env.sample infra/.env
+   ```
 
 2) Поднимите инфраструктуру (Tilt установится автоматически):
+   ```bash
    make tilt-up
+   ```
 
 3) Дождитесь готовности сервисов:
+   ```bash
    make infra-wait
+   ```
 
 4) Запустите интеграционные проверки:
+   ```bash
    make infra-test
+   ```
 
 5) Зарегистрируйте Avro‑схемы (TopicNameStrategy + BACKWARD_TRANSITIVE):
+   ```bash
    make register-schemas
+   ```
 
-- Полный one‑shot прогон (поднять и проверить): make integration
-- Остановка: make tilt-down; полная очистка: make infra-down
+- Полный one‑shot прогон (поднять и проверить): `make integration`
+- Остановка: `make tilt-down`; полная очистка: `make infra-down`
 
-## Connectivity: Ports & Services
+## Подключение: Порты и сервисы
 
 - Postgres/Citus (coordinator): localhost:5432
 - Schema Registry: http://localhost:8081
@@ -39,9 +63,9 @@
 
 Проброс портов выполняет Tilt (см. infra/Tiltfile). В k8s ресурсы разворачиваются в namespace `dev-infra`.
 
-## Environment Variables
+## Переменные окружения
 
-- Основной файл окружения: infra/.env (создайте из infra/.env.sample)
+- Основной файл окружения: `infra/.env` (создайте из `infra/.env.sample`)
 - Ключевые переменные:
   - `DATABASE_URL=postgresql://app:app@localhost:5432/app` - подключение к PostgreSQL/Citus
   - `REDIS_URL=redis://localhost:6379` - подключение к Redis
@@ -52,10 +76,10 @@
   - `K8S_NAMESPACE=dev-infra` - namespace в Kubernetes
 
 Примечания:
-- Для k8s значения берутся из манифестов infra/k8s/*.yaml и пробросов Tilt
+- Для k8s значения берутся из манифестов `infra/k8s/*.yaml` и пробросов Tilt
 - Для запуска через Docker Compose: `USE_DOCKER=1 make infra-up`
 
-## Database (Postgres/Citus)
+## База данных (Postgres/Citus)
 
 - **Connection String:** `DATABASE_URL=postgresql://app:app@localhost:5432/app`
 - Подключение через psql:
@@ -87,14 +111,26 @@
 
 - Сид создаёт тенанта 10001. Таблица `tenants(id bigint primary key, created_at timestamptz)` распределена по `id` и инициализируется через Job.
 - Создать нового тенанта:
+  ```sql
   INSERT INTO tenants(id) VALUES (10002);
+  ```
 
 - Распределять «тенантские» таблицы по `tenant_id` и коллокировать с `tenants`:
+  ```sql
   SELECT create_distributed_table('your_table', 'tenant_id', colocate_with => 'tenants');
+  ```
 
 - Разместить данные тенанта на конкретном воркере:
-  1) Узнать shard id: SELECT citus_get_shard_id_for_distribution_column('tenants'::regclass, 10002);
-  2) Переместить шард: SELECT citus_move_shard_placement(<shard_id>, old_node, old_port, 'citus-worker-0.citus-worker.dev-infra.svc.cluster.local', 5432);
+  1) Узнать shard id: 
+     ```sql
+     SELECT citus_get_shard_id_for_distribution_column('tenants'::regclass, 10002);
+     ```
+  2) Переместить шард: 
+     ```sql
+     SELECT citus_move_shard_placement(<shard_id>, old_node, old_port, 
+       'citus-worker-0.citus-worker.dev-infra.svc.cluster.local', 5432);
+     ```
+  
   В dev среде единственный воркер, поэтому перемещение обычно не требуется.
 
 ## Redis
@@ -173,7 +209,7 @@
   sr = SchemaRegistryClient({'url': os.environ['SCHEMA_REGISTRY_URL']})
   ```
 
-## Kafka Topics & Naming
+## Kafka топики и именование
 
 - Топики по контекстам: V1_BETS, V1_PAYMENTS, V1_BALANCES, V1_COMPLIANCE, V1_SYSTEM
 - Субжекты SR: TopicNameStrategy → {topic}-value
@@ -189,36 +225,40 @@
 
 ## Команды разработчика
 
-- make tilt-up: запустить инфраструктуру через Tilt (авто‑установка Tilt)
-- make infra-wait: дождаться готовности всех сервисов (k8s‑aware)
-- make infra-test: интеграционные тесты (БД транзакционно, Redis, Redpanda, SR)
-- make register-schemas: зарегистрировать Avro схемы и задать совместимость
-- make integration: поднять через Tilt (CI‑режим) и выполнить тесты
-- make tilt-down: остановить Tilt
-- make infra-down: удалить ресурсы и namespace
+- `make tilt-up`: запустить инфраструктуру через Tilt (авто‑установка Tilt)
+- `make infra-wait`: дождаться готовности всех сервисов (k8s‑aware)
+- `make infra-test`: интеграционные тесты (авто-регистрирует схемы перед запуском)
+- `make register-schemas`: зарегистрировать Avro схемы и задать совместимость (идемпотентно)
+- `make integration`: поднять через Tilt (CI‑режим) и выполнить тесты
+- `make tilt-down`: остановить Tilt
+- `make infra-down`: удалить ресурсы и namespace
 
 ## Observability (Dev/Stage)
 
 - По умолчанию поднимается вместе с `make tilt-up` (Loki, Promtail, Grafana загружаются из infra/Tiltfile).
 - Ручная установка/снос (если нужно без Tilt):
+  ```bash
   make obs-up
   make obs-down
+  ```
 
 - Grafana:
+  ```bash
   kubectl -n dev-infra port-forward svc/grafana 3000:3000
+  ```
   Откройте http://localhost:3000 (admin/admin). Datasource Loki уже настроен.
 
-- Promtail собирает stdout всех pod’ов; фильтруйте по labels (namespace=dev-infra, app=<service>).
+- Promtail собирает stdout всех pod'ов; фильтруйте по labels (namespace=dev-infra, app=<service>).
 
-– Для доступа к UI Grafana при работе через Tilt уже есть port‑forward 3000 → 3000.
+- Для доступа к UI Grafana при работе через Tilt уже есть port‑forward 3000 → 3000.
 
-## Logging (Loki)
+## Логирование (Loki)
 
-- Default (recommended): микросервисы пишут логи в stdout; Promtail (DaemonSet) подбирает логи контейнеров и отправляет их в Loki.
+- **По умолчанию (рекомендуется)**: микросервисы пишут логи в stdout; Promtail (DaemonSet) подбирает логи контейнеров и отправляет их в Loki.
   - Автолейблы: `namespace`, `pod`, `app`, `container`, `node` (см. promtail relabel_configs).
   - В dev использован мультитенантный Loki; для системных/инфра‑логов Promtail шлёт в tenant 10001.
 
-- Direct push (пер‑запросная мультитенантность, вариант B): микросервисы сами пушат логи в Loki и проставляют tenant из входящего HTTP‑заголовка клиента.
+- **Direct push (пер‑запросная мультитенантность, вариант B)**: микросервисы сами пушат логи в Loki и проставляют tenant из входящего HTTP‑заголовка клиента.
   - Никогда не берите tenant из env — только из входящего запроса.
   - Какой заголовок? Рекомендуем `X-Tenant-Id: <numeric>`; далее используйте это же значение для `X-Scope-OrgID` при пуше в Loki.
   - Эндпоинт в кластере: `http://loki:3100/loki/api/v1/push`.
@@ -244,7 +284,7 @@
 
 ### Клиентские примеры (Direct push)
 
-- Node.js (Express)
+**Node.js (Express)**
 ```js
 import fetch from 'node-fetch';
 
@@ -254,16 +294,22 @@ export async function logToLoki(req, message, labels = {}) {
   const tenant = req.get('X-Tenant-Id'); // numeric, required
   if (!tenant) return; // or 400/skip
   const tsNs = BigInt(Date.now()) * 1000000n;
-  const stream = { stream: { service: 'my-api', env: 'dev', ...labels }, values: [[tsNs.toString(), message]] };
+  const stream = { 
+    stream: { service: 'my-api', env: 'dev', ...labels }, 
+    values: [[tsNs.toString(), message]] 
+  };
   await fetch(`${LOKI_URL}/loki/api/v1/push`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'X-Scope-OrgID': tenant },
+    headers: { 
+      'content-type': 'application/json', 
+      'X-Scope-OrgID': tenant 
+    },
     body: JSON.stringify({ streams: [stream] }),
   });
 }
 ```
 
-- Go (net/http)
+**Go (net/http)**
 ```go
 tenant := r.Header.Get("X-Tenant-Id")
 if tenant != "" {
@@ -277,7 +323,7 @@ if tenant != "" {
 }
 ```
 
-- PHP
+**PHP**
 ```php
 $tenant = $_SERVER['HTTP_X_TENANT_ID'] ?? null;
 if ($tenant) {
@@ -297,17 +343,66 @@ if ($tenant) {
 }
 ```
 
-Validation tips
+**Советы по валидации:**
 - Требуйте numeric `X-Tenant-Id`, проверяйте на диапазон/доступ.
 - При отсутствии/невалидности — не пушьте в Loki (или используйте служебный tenant для ошибок авторизации).
 - Добавляйте лейблы `service`, `env`, `version`, чтобы удобно искать логи.
 
-## Как добавить Git Submodule
+## 🚀 Добавление микросервисов (только Git Submodules)
+
+> **Важно:** Все сервисы ДОЛЖНЫ добавляться как Git submodules. Создание сервисов напрямую в packages/* запрещено.
+
+### Шаг 1: Добавьте сервис как Git submodule
 
 ```bash
-git submodule add git@github.com:ts-ign0re/react-router-shadcn-starter.git packages/tenants-dashboard
+git submodule add git@github.com:org/your-service.git packages/your-service
+git submodule update --init --recursive
 ```
 
-### Где
-1. `git@github.com:ts-ign0re/react-router-shadcn-starter.git` - URL репозитория который требуется подключить к системе
-2. `packages/tenants-dashboard` - путь к папке, в которую будет добавлен репозиторий со всей историей
+### Шаг 2: Добавьте инфраструктуру
+
+```bash
+# Через make
+make add-infra PATH=packages/your-service
+
+# Или напрямую скриптом
+./scripts/service-add-infra.sh packages/your-service
+```
+
+**Что делает скрипт:**
+1. 🔍 Автоопределяет язык (Node.js, Go, Python, PHP)
+2. 🐳 Генерирует оптимизированный Dockerfile
+3. ☸️ Создает Kubernetes манифесты (base + overlays)
+4. ⚙️ Интерактивная настройка
+5. ✅ Проверяет корректность настройки
+
+**Интерактивные подсказки:**
+```
+Что вы хотите добавить?
+1) Dockerfile (если отсутствует)
+2) Kubernetes манифесты (k8s/)
+3) Всё вышеперечисленное
+4) Отмена
+
+Выберите опцию [1-4]: 3
+Обнаружено: Node.js проект
+Порт приложения [по умолчанию: 3000]: 8080
+```
+
+### Шаг 3: Деплой
+
+```bash
+make tilt-up
+```
+
+Tilt автоматически обнаружит сервисы, содержащие:
+- `Dockerfile` в корне
+- `k8s/overlays/dev/kustomization.yaml`
+
+### Внешние репозитории
+
+Вы также можете добавить инфраструктуру к внешним репо (вне packages/):
+
+```bash
+./scripts/service-add-infra.sh /path/to/external/repo
+```

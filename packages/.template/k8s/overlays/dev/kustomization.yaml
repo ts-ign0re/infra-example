@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dev-infra
+
+resources:
+  - ../../base
+
+# Dev-specific patches
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: REPLACE_SERVICE_NAME
+      spec:
+        replicas: 1
+        template:
+          spec:
+            containers:
+            - name: REPLACE_SERVICE_NAME
+              env:
+              - name: NODE_ENV
+                value: "development"
+              - name: LOG_LEVEL
+                value: "debug"
+
+# Image will be built by Tilt
+images:
+  - name: REPLACE_SERVICE_NAME
+    newName: REPLACE_SERVICE_NAME
+    newTag: tilt-dev

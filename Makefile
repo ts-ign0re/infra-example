@@ -2,7 +2,7 @@ INFRA_DIR := infra
 COMPOSE := docker compose -f $(INFRA_DIR)/docker-compose.yml --env-file $(INFRA_DIR)/.env
 K8S_NS := dev-infra
 
-.PHONY: infra-up infra-down infra-restart infra-wait infra-test migrate register-schemas generate-types generate-types-ts generate-types-php tilt-up tilt-down
+.PHONY: infra-up infra-down infra-restart infra-wait infra-test migrate register-schemas generate-types generate-types-ts generate-types-php tilt-up tilt-down add-infra
 
 infra-up:
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
@@ -98,8 +98,23 @@ obs-down:
 
 # Enhanced integration tests v1.01 (with visual progress)
 infra-test:
+	@echo "Registering Avro schemas before tests..."
+	@$(MAKE) register-schemas > /dev/null 2>&1 || true
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
 		bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
 	else \
 		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/scripts/integration-tests.sh ; \
 	fi
+
+# ============================================
+# SERVICE MANAGEMENT
+# ============================================
+
+add-infra:
+	@if [ -z "$(PATH)" ]; then \
+		echo "Usage: make add-infra PATH=packages/existing-service" ; \
+		echo "" ; \
+		echo "Example: make add-infra PATH=packages/tenants-dashboard" ; \
+		exit 1 ; \
+	fi
+	@./scripts/service-add-infra.sh $(PATH)
