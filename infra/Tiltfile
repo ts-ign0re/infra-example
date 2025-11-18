@@ -168,16 +168,14 @@ for service in services:
         # Choose dockerfile based on DEV_MODE
         if dev_mode and has_dockerfile_dev:
             dockerfile = dockerfile_dev
-            image_name = service_name + '-dev'
             print("  ✓ Using Dockerfile.dev for HMR")
         else:
             dockerfile = service_path + '/Dockerfile'
-            image_name = service_name
             print("  ✓ Using production Dockerfile")
         
-        # Generic docker build
+        # Generic docker build with tag that matches kustomization.yaml
         docker_build(
-            image_name,
+            service_name + ':tilt-dev',
             service_path,
             dockerfile=dockerfile,
             live_update=[
