@@ -84,16 +84,40 @@
 
 Реализовать команды:
 
-- `make infra-up` — запуск инфраструктуры.
-- `make infra-down` — остановка и очистка.
-- `make infra-restart` — перезапуск.
-- `make infra-wait` — вызов `wait-for-infra.sh`.
-- `make infra-test` — smoke-тесты.
-- `make migrate` — Flyway миграции.
-- `make register-schemas` — регистрация Avro-схем.
-- `make generate-types` — интерактивная генерация типов.
-- `make generate-types-ts` и `make generate-types-php` — прямые вызовы.
-- `make tilt-up` / `make tilt-down` — управление Tilt.
+### Инфраструктура (Docker Compose / Kubernetes)
+- `make infra-up` — запуск базовой инфраструктуры (Redpanda, Schema Registry, Redis, PostgreSQL/Citus).
+- `make infra-down` — остановка и полная очистка инфраструктуры.
+- `make infra-restart` — перезапуск инфраструктуры (down + up).
+- `make infra-wait` — ожидание готовности всех сервисов инфраструктуры.
+- `make infra-test` — запуск интеграционных smoke-тестов инфраструктуры.
+
+### Разработка с Tilt (Kubernetes)
+- `make tilt-up` — запуск полного dev окружения с Tilt (инфраструктура + сервисы + автоматические миграции).
+- `make tilt-down` — остановка Tilt окружения.
+- `make integration` — запуск полного CI цикла (tilt ci + интеграционные тесты + очистка).
+
+### База данных
+- `make migrate` — применение Flyway миграций к базе данных.
+- `make event-sourcing-test` — тестирование Event Sourcing (события, materialized views, триггеры).
+
+### Event Streaming
+- `make register-schemas` — регистрация всех Avro-схем в Schema Registry.
+- `make generate-types` — интерактивная генерация типов из Avro схем.
+- `make generate-types-ts` — генерация TypeScript типов.
+- `make generate-types-php` — генерация PHP типов.
+
+### Observability
+- `make obs-up` — запуск Observability стека (Loki, Promtail, Grafana).
+- `make obs-down` — остановка Observability стека.
+
+### Управление сервисами
+- `make add-infra SERVICE_PATH=<path>` — добавление Kubernetes конфигурации для существующего сервиса.
+
+### Окружение
+- `make show-env` — показать все переменные окружения доступные в кластере.
+- `make check-env SERVICE=<name>` — проверить переменные окружения в запущенном сервисе.
+
+Все команды поддерживают переключение между Docker Compose и Kubernetes через переменную `USE_DOCKER=1` (по умолчанию используется Kubernetes).
 
 ## 7. Интеграция с робочим процессом разработчиков
 
