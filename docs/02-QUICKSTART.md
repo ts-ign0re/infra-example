@@ -1,4 +1,22 @@
-# Environment Variables - Quick Start
+# 02. Быстрый старт - Подключение к сервисам
+
+> **Prerequisite:** Инфраструктура должна быть запущена! Если ещё не запускали, читайте [01. Настройка инфраструктуры](01-SETUP-INFRASTRUCTURE.md)
+
+---
+
+## Проверка что всё работает
+
+После `make tilt-up` и `make infra-wait` у вас должна работать инфраструктура. Проверим:
+
+```bash
+# Проверка всех сервисов
+make infra-test
+
+# Проверка регистрации схем
+make register-schemas
+```
+
+---
 
 ## Connection Strings (Copy-Paste Ready)
 
@@ -195,3 +213,18 @@ make infra-down && make tilt-up && make infra-wait
 # Register schemas
 make register-schemas
 ```
+
+---
+
+## Что дальше?
+
+Теперь, когда инфраструктура работает, можно:
+
+- **Изучить переменные окружения:** [03. Переменные окружения](03-ENVIRONMENT-VARS.md)
+- **Добавить свой сервис:** [05. Руководство по сервисам](05-SERVICES-GUIDE.md)
+- **Настроить Tiltfile:** [04. Руководство по Tiltfile](04-TILTFILE-GUIDE.md)
+- **Понять архитектуру:** [07. Спецификации архитектуры](07-ARCHITECTURE-SPECS.md)
+
+---
+
+**Предыдущий шаг:** [01. Настройка инфраструктуры](01-SETUP-INFRASTRUCTURE.md)

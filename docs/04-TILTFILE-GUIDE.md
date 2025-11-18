@@ -354,5 +354,5 @@ port_forwards=[port_forward(3001, 3000)]  # Локальный 3001 → конт
 ## См. также
 
 - [Tilt Documentation](https://docs.tilt.dev/)
-- [SERVICES_GUIDE.md](SERVICES_GUIDE.md) - Полное руководство по сервисам
+- [05. Руководство по сервисам](05-SERVICES-GUIDE.md) - Полное руководство по сервисам
 - [packages/.template/Tiltfile.example](../packages/.template/Tiltfile.example) - Шаблоны

@@ -74,7 +74,7 @@ tilt-up:
 	@bash $(INFRA_DIR)/scripts/check-k8s.sh && \
 	kubectl apply -f $(INFRA_DIR)/k8s/namespace.yaml && \
 	TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh) && \
-	cd $(INFRA_DIR) && $$TILT_BIN up --stream=true
+	cd $(INFRA_DIR) && DEV_MODE=true $$TILT_BIN up --stream=true
 
 tilt-down:
 	@TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh); \

@@ -855,7 +855,7 @@ kubectl get pods -n dev-infra | grep citus-coordinator
 
 ## Дальнейшие шаги
 
-- 📖 Прочитайте [Production Deployment Guide](./PRODUCTION_DEPLOYMENT.md)
+- 📖 Прочитайте [06. Production Deployment Guide](06-PRODUCTION-DEPLOYMENT.md)
 - 🏗️ Изучите примеры в `packages/.template/`
 - 🔍 Посмотрите существующие сервисы в `packages/`
 - 💬 Вопросы? Спросите в #dev-infra канале

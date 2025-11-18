@@ -4,10 +4,10 @@
 
 **Легаси не поддерживается. Всё только в Kubernetes с HMR.**
 
-- ✅ Разработка **ТОЛЬКО** внутри кластера
-- ✅ HMR для фронтенда (если поддерживается)
-- ✅ Автоматический доступ ко всей инфраструктуре
-- ✅ Изолированное окружение
+- Разработка **ТОЛЬКО** внутри кластера
+- HMR для фронтенда (если поддерживается)
+- Автоматический доступ ко всей инфраструктуре
+- Изолированное окружение
 
 ## Quick Start
 
@@ -336,7 +336,8 @@ kubectl rollout restart deployment/my-service -n dev-infra
 
 ## См. также
 
-- [ENVIRONMENT_VARS.md](ENVIRONMENT_VARS.md) - Environment variables
-- [TILTFILE_GUIDE.md](TILTFILE_GUIDE.md) - Настройка Tiltfile
-- [SERVICES_GUIDE.md](SERVICES_GUIDE.md) - Гайд по сервисам
+- **Следующий шаг:** [02. Быстрый старт](02-QUICKSTART.md) - Как подключиться к сервисам
+- [03. Переменные окружения](03-ENVIRONMENT-VARS.md) - Environment variables
+- [04. Руководство по Tiltfile](04-TILTFILE-GUIDE.md) - Настройка Tilt
+- [05. Руководство по сервисам](05-SERVICES-GUIDE.md) - Гайд по сервисам
 - [README.md](../README.md) - Главная документация
