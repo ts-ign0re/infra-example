@@ -28,13 +28,12 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7
+          image: redis:8.2.2
           ports:
             - containerPort: 6379
               name: redis
           readinessProbe:
             exec:
-              command: ["redis-cli","ping"]
+              command: ["redis-cli", "ping"]
             initialDelaySeconds: 5
             periodSeconds: 5
-

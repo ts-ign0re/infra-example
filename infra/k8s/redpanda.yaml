@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: redpanda
-          image: redpandadata/redpanda:latest
+          image: redpandadata/redpanda:v25.2.11
           args:
             - redpanda
             - start
@@ -51,7 +51,12 @@ spec:
               name: admin
           readinessProbe:
             exec:
-              command: ["bash","-lc","rpk cluster health --watch=false --exit-when-healthy --api-urls=localhost:9644"]
+              command:
+                [
+                  "bash",
+                  "-lc",
+                  "rpk cluster health --watch=false --exit-when-healthy --api-urls=localhost:9644",
+                ]
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
@@ -66,4 +71,3 @@ spec:
       volumes:
         - name: data
           emptyDir: {}
-

@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:15
+          image: postgres:18
           env:
             - name: POSTGRES_USER
               value: "app"
@@ -41,7 +41,7 @@ spec:
               name: pg
           readinessProbe:
             exec:
-              command: ["pg_isready","-U","app","-d","app"]
+              command: ["pg_isready", "-U", "app", "-d", "app"]
             initialDelaySeconds: 5
             periodSeconds: 5
           volumeMounts:
@@ -50,4 +50,3 @@ spec:
       volumes:
         - name: data
           emptyDir: {}
-

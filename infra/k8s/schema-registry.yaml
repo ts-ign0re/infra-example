@@ -29,8 +29,8 @@ spec:
       enableServiceLinks: false
       initContainers:
         - name: wait-redpanda
-          image: redpandadata/redpanda:latest
-          command: ["bash","-lc"]
+          image: redpandadata/redpanda:v25.2.11
+          command: ["bash", "-lc"]
           args:
             - |
               echo "Waiting for Redpanda cluster health...";
@@ -39,8 +39,8 @@ spec:
                   echo "Redpanda is healthy"; exit 0; fi; sleep 2; done; echo "Redpanda not healthy in time"; exit 1
       containers:
         - name: schema-registry
-          image: confluentinc/cp-schema-registry:7.6.0
-          command: ["bash","-lc"]
+          image: confluentinc/cp-schema-registry:8.1.0
+          command: ["bash", "-lc"]
           args:
             - |
               set -ex
