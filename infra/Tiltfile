@@ -158,18 +158,32 @@ for service in services:
         print("  ✓ Loading service-specific Tiltfile")
         load_dynamic(service_tiltfile)
     else:
-        # Fallback: generic configuration
+        # Fallback: generic configuration with DEV_MODE support
         print("  ⚠ No Tiltfile found, using generic configuration")
+        
+        # Check if Dockerfile.dev exists for HMR
+        dockerfile_dev = service_path + '/Dockerfile.dev'
+        has_dockerfile_dev = str(local('test -f "%s" && echo "1" || echo "0"' % dockerfile_dev, quiet=True)).strip() == "1"
+        
+        # Choose dockerfile based on DEV_MODE
+        if dev_mode and has_dockerfile_dev:
+            dockerfile = dockerfile_dev
+            image_name = service_name + '-dev'
+            print("  ✓ Using Dockerfile.dev for HMR")
+        else:
+            dockerfile = service_path + '/Dockerfile'
+            image_name = service_name
+            print("  ✓ Using production Dockerfile")
         
         # Generic docker build
         docker_build(
-            service_name,
+            image_name,
             service_path,
-            dockerfile=service_path + '/Dockerfile',
+            dockerfile=dockerfile,
             live_update=[
                 sync(service_path, '/app'),
             ],
-            ignore=['node_modules', '.git', 'vendor', '__pycache__', 'dist', 'build', 'target']
+            ignore=['node_modules', '.git', 'vendor', '__pycache__', 'dist', 'build', 'target', '.next', '.turbo']
         )
         
         # Apply K8s manifests
