@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS bet_events (
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_BET_PLACED, V1_BET_SETTLED, etc.
     event_data JSONB NOT NULL,
-    timestamp BIGINT NOT NULL,           -- Unix timestamp ms
+    timestamp BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::BIGINT,           -- Unix timestamp ms
     version INT NOT NULL DEFAULT 1,      -- schema version
     metadata JSONB,                      -- correlation_id, user_agent, etc.
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS payment_events (
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_PAYMENTS_DEPOSIT_CREATED, etc.
     event_data JSONB NOT NULL,
-    timestamp BIGINT NOT NULL,
+    timestamp BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::BIGINT,
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS balance_events (
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_BALANCE_ADJUSTED, etc.
     event_data JSONB NOT NULL,
-    timestamp BIGINT NOT NULL,
+    timestamp BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::BIGINT,
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS compliance_events (
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_KYC_VERIFIED, V1_LIMIT_EXCEEDED, etc.
     event_data JSONB NOT NULL,
-    timestamp BIGINT NOT NULL,
+    timestamp BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::BIGINT,
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS tenant_events (
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_TENANT_CREATED, V1_TENANT_PLAN_CHANGED, etc.
     event_data JSONB NOT NULL,
-    timestamp BIGINT NOT NULL,
+    timestamp BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::BIGINT,
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS system_events (
     aggregate_id VARCHAR(255),
     event_type VARCHAR(100) NOT NULL,
     event_data JSONB NOT NULL,
-    timestamp BIGINT NOT NULL,
+    timestamp BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::BIGINT,
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),

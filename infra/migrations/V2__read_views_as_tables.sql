@@ -150,148 +150,22 @@ FROM latest_payment_events
 ON CONFLICT (tenant_id, payment_id) DO NOTHING;
 
 -- ============================================
--- INCREMENTAL UPDATE TRIGGERS
+-- VIEW UPDATE STRATEGY
+-- ============================================
+-- ⚠️ ВАЖНО: Citus НЕ поддерживает триггеры на distributed tables!
+--
+-- Read views (bets_view, payments_view) обновляются:
+-- 1. При вставке события - приложение делает UPSERT в view
+-- 2. Или периодически через scheduled job (каждые N секунд)
+-- 
+-- Пример UPSERT из приложения:
+-- INSERT INTO bets_view (...) VALUES (...) 
+-- ON CONFLICT (tenant_id, bet_id) DO UPDATE SET ...
+--
+-- Преимущества:
+-- - Контроль производительности на уровне приложения
+-- - Возможность батчинга обновлений
+-- - Нет overhead от триггеров на каждый INSERT
 -- ============================================
 
--- Trigger function для bet_events
-CREATE OR REPLACE FUNCTION incremental_update_bets_view() RETURNS TRIGGER AS $$
-BEGIN
-  -- UPSERT: обновить или вставить
-  INSERT INTO bets_view (
-    tenant_id, bet_id, idempotency_key, user_id, amount, odds, 
-    selection, event_id, market_id, status, payout, 
-    last_updated_timestamp, last_updated_at
-  )
-  SELECT 
-    tenant_id,
-    aggregate_id as bet_id,
-    idempotency_key,
-    (event_data->>'user_id') as user_id,
-    (event_data->>'amount')::decimal as amount,
-    (event_data->>'odds')::decimal as odds,
-    (event_data->>'selection') as selection,
-    (event_data->>'event_id') as event_id,
-    (event_data->>'market_id') as market_id,
-    CASE 
-      WHEN event_type = 'V1_BET_PLACED' THEN 'placed'
-      WHEN event_type = 'V1_BET_ACCEPTED' THEN 'accepted'
-      WHEN event_type = 'V1_BET_REJECTED' THEN 'rejected'
-      WHEN event_type = 'V1_BET_SETTLED_WIN' THEN 'won'
-      WHEN event_type = 'V1_BET_SETTLED_LOSS' THEN 'lost'
-      WHEN event_type = 'V1_BET_SETTLED_VOID' THEN 'void'
-      WHEN event_type = 'V1_BET_CANCELLED' THEN 'cancelled'
-      ELSE 'unknown'
-    END as status,
-    (event_data->>'payout')::decimal as payout,
-    timestamp as last_updated_timestamp,
-    created_at as last_updated_at
-  FROM bet_events
-  WHERE tenant_id = NEW.tenant_id 
-    AND aggregate_id = NEW.aggregate_id
-  ORDER BY timestamp DESC
-  LIMIT 1
-  ON CONFLICT (tenant_id, bet_id) 
-  DO UPDATE SET
-    idempotency_key = EXCLUDED.idempotency_key,
-    user_id = EXCLUDED.user_id,
-    amount = EXCLUDED.amount,
-    odds = EXCLUDED.odds,
-    selection = EXCLUDED.selection,
-    event_id = EXCLUDED.event_id,
-    market_id = EXCLUDED.market_id,
-    status = EXCLUDED.status,
-    payout = EXCLUDED.payout,
-    last_updated_timestamp = EXCLUDED.last_updated_timestamp,
-    last_updated_at = EXCLUDED.last_updated_at;
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER after_bet_events_insert_incremental
-AFTER INSERT ON bet_events
-FOR EACH ROW
-EXECUTE FUNCTION incremental_update_bets_view();
-
--- Trigger function для payment_events
-CREATE OR REPLACE FUNCTION incremental_update_payments_view() RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO payments_view (
-    tenant_id, payment_id, idempotency_key, user_id, amount, currency,
-    payment_method, external_id, payment_type, status,
-    last_updated_timestamp, last_updated_at
-  )
-  SELECT 
-    tenant_id,
-    aggregate_id as payment_id,
-    idempotency_key,
-    (event_data->>'user_id') as user_id,
-    (event_data->>'amount')::decimal as amount,
-    (event_data->>'currency') as currency,
-    (event_data->>'payment_method') as payment_method,
-    (event_data->>'external_id') as external_id,
-    CASE 
-      WHEN event_type LIKE '%_DEPOSIT_%' THEN 'deposit'
-      WHEN event_type LIKE '%_WITHDRAWAL_%' THEN 'withdrawal'
-      ELSE 'other'
-    END as payment_type,
-    CASE 
-      WHEN event_type LIKE '%_CREATED' THEN 'created'
-      WHEN event_type LIKE '%_PENDING' THEN 'pending'
-      WHEN event_type LIKE '%_COMPLETED' THEN 'completed'
-      WHEN event_type LIKE '%_FAILED' THEN 'failed'
-      WHEN event_type LIKE '%_REFUNDED' THEN 'refunded'
-      WHEN event_type LIKE '%_APPROVED' THEN 'approved'
-      WHEN event_type LIKE '%_REJECTED' THEN 'rejected'
-      ELSE 'unknown'
-    END as status,
-    timestamp as last_updated_timestamp,
-    created_at as last_updated_at
-  FROM payment_events
-  WHERE tenant_id = NEW.tenant_id 
-    AND aggregate_id = NEW.aggregate_id
-  ORDER BY timestamp DESC
-  LIMIT 1
-  ON CONFLICT (tenant_id, payment_id) 
-  DO UPDATE SET
-    idempotency_key = EXCLUDED.idempotency_key,
-    user_id = EXCLUDED.user_id,
-    amount = EXCLUDED.amount,
-    currency = EXCLUDED.currency,
-    payment_method = EXCLUDED.payment_method,
-    external_id = EXCLUDED.external_id,
-    payment_type = EXCLUDED.payment_type,
-    status = EXCLUDED.status,
-    last_updated_timestamp = EXCLUDED.last_updated_timestamp,
-    last_updated_at = EXCLUDED.last_updated_at;
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER after_payment_events_insert_incremental
-AFTER INSERT ON payment_events
-FOR EACH ROW
-EXECUTE FUNCTION incremental_update_payments_view();
-
--- ============================================
--- AGGREGATE VIEWS остаются materialized
--- Обновляются периодически через CronJob
--- ============================================
-
--- Функция для периодического обновления агрегатных views
-CREATE OR REPLACE FUNCTION refresh_aggregate_views() RETURNS void AS $$
-BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY tenants_summary_view;
-  REFRESH MATERIALIZED VIEW CONCURRENTLY user_activity_view;
-  REFRESH MATERIALIZED VIEW CONCURRENTLY user_balances_view;
-END;
-$$ LANGUAGE plpgsql;
-
--- ============================================
--- NOTES:
--- 1. bets_view и payments_view теперь обычные таблицы (не materialized)
--- 2. Инкрементальное обновление через UPSERT (~5-10ms)
--- 3. Агрегатные views остаются materialized (обновляются раз в 5 минут)
--- ============================================
 

@@ -100,6 +100,13 @@ obs-down:
 infra-test:
 	@echo "Registering Avro schemas before tests..."
 	@$(MAKE) register-schemas > /dev/null 2>&1 || true
+	@echo "Testing Citus distribution setup..."
+	@if [ "$(USE_DOCKER)" = "1" ]; then \
+		bash $(INFRA_DIR)/tests/test-citus-distribution.sh ; \
+	else \
+		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/tests/test-citus-distribution.sh ; \
+	fi
+	@echo "Running infrastructure integration tests..."
 	@if [ "$(USE_DOCKER)" = "1" ]; then \
 		bash $(INFRA_DIR)/tests/integration-tests.sh ; \
 	else \
@@ -119,6 +126,14 @@ event-sourcing-test:
 		bash $(INFRA_DIR)/tests/test-event-sourcing.sh ; \
 	else \
 		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/tests/test-event-sourcing.sh ; \
+	fi
+
+citus-distribution-test:
+	@echo "Testing Citus distribution setup..."
+	@if [ "$(USE_DOCKER)" = "1" ]; then \
+		bash $(INFRA_DIR)/tests/test-citus-distribution.sh ; \
+	else \
+		USE_K8S=1 K8S_NAMESPACE=$(K8S_NS) bash $(INFRA_DIR)/tests/test-citus-distribution.sh ; \
 	fi
 
 # ============================================
