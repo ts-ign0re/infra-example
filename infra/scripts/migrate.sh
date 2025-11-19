@@ -21,9 +21,14 @@ if [ "${USE_K8S:-}" = "1" ]; then
       echo "PostgreSQL ready"
       break
     fi
+    echo "  Attempt $i/60 - PostgreSQL not ready yet..."
     sleep 2
     if [ "$i" -eq 60 ]; then
       echo "ERROR: PostgreSQL not ready after 120 seconds" >&2
+      echo "Checking pod status:" >&2
+      kubectl -n "$NS" get pods -l app=citus-coordinator >&2
+      echo "Checking pod logs:" >&2
+      kubectl -n "$NS" logs deploy/citus-coordinator --tail=20 >&2
       exit 1
     fi
   done
@@ -55,8 +60,17 @@ if [ "${USE_K8S:-}" = "1" ]; then
         echo "     → Already applied (objects exist)"
         ((migration_count++))
       else
-        echo "     → Failed to apply"
+        echo "     → Failed to apply" >&2
+        echo "" >&2
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+        echo "Migration Error Details:" >&2
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+        echo "File: $migration_name" >&2
+        echo "" >&2
+        echo "Error Output:" >&2
         echo "$error_output" >&2
+        echo "" >&2
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
         exit 1
       fi
     fi
