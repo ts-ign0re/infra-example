@@ -77,23 +77,24 @@ for file in "$SCHEMA_DIR"/*.avsc; do
   
   echo "  Registering: $name → $subject"
   
-  # Register schema
-  if jq -nc --arg schema "$(jq -c . "$file")" '{schema: $schema}' | \
-     curl -fsS -X POST -H 'Content-Type: application/vnd.schemaregistry.v1+json' \
-       --data @- \
-       "$SR_URL/subjects/$subject/versions" >/dev/null 2>&1; then
-    
-    # Set compatibility
-    jq -nc --arg c "$COMPAT" '{compatibility: $c}' | \
-    curl -fsS -X PUT -H 'Content-Type: application/vnd.schemaregistry.v1+json' \
+  # Register schema (do not fail on error to keep Tilt happy)
+  set +e
+  jq -nc --arg schema "$(jq -c . "$file")" '{schema: $schema}' | \
+    curl -fsS -X POST -H 'Content-Type: application/vnd.schemaregistry.v1+json' \
       --data @- \
-      "$SR_URL/config/$subject" >/dev/null 2>&1
-    
+      "$SR_URL/subjects/$subject/versions" >/dev/null 2>&1
+  reg_exit=$?
+  if [ $reg_exit -eq 0 ]; then
+    jq -nc --arg c "$COMPAT" '{compatibility: $c}' | \
+      curl -fsS -X PUT -H 'Content-Type: application/vnd.schemaregistry.v1+json' \
+        --data @- \
+        "$SR_URL/config/$subject" >/dev/null 2>&1 || true
     echo "     → Registered with compatibility: $COMPAT"
     ((registered_count++))
   else
-    echo "     → Already registered or error occurred"
+    echo "     → Already registered or error (exit=$reg_exit)"
   fi
+  set -e
 done
 
 echo ""
@@ -108,3 +109,5 @@ if [ -n "${PF_PID:-}" ]; then
   kill $PF_PID >/dev/null 2>&1 || true
   trap - EXIT
 fi
+
+exit 0

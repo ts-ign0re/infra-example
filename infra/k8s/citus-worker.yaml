@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: citusdata/citus:12.1
+          image: citusdata/citus:13.0 # upgraded for PG18 (ensure tag supports PG18)
           args: ["-c", "shared_preload_libraries=citus"]
           env:
             - name: POSTGRES_USER

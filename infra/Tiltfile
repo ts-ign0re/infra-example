@@ -31,13 +31,13 @@ k8s_yaml([
 ])
 
 # Configure infrastructure resources
-k8s_resource('redpanda', 
+k8s_resource('redpanda',
     port_forwards=[port_forward(19092, 9092), port_forward(9644, 9644)],
     labels=['infrastructure']
 )
 
-k8s_resource('schema-registry', 
-    port_forwards=[port_forward(8081, 8081)], 
+k8s_resource('schema-registry',
+    port_forwards=[port_forward(8081, 8081)],
     resource_deps=['redpanda'],
     labels=['infrastructure']
 )
@@ -64,12 +64,12 @@ print("  Schemas will be auto-registered on startup")
 # CONTINUE WITH OTHER INFRASTRUCTURE
 # ============================================
 
-k8s_resource('redis', 
+k8s_resource('redis',
     port_forwards=[port_forward(6379, 6379)],
     labels=['infrastructure']
 )
 
-k8s_resource('citus-coordinator', 
+k8s_resource('citus-coordinator',
     port_forwards=[port_forward(5432, 5432)],
     labels=['infrastructure']
 )
@@ -106,7 +106,7 @@ print("  Migrations will be auto-applied on startup")
 # ============================================
 
 # Observability stack with proper resource grouping
-k8s_resource('loki', 
+k8s_resource('loki',
     port_forwards=[port_forward(3100, 3100)],
     objects=[
         'loki-config:configmap'
@@ -114,7 +114,7 @@ k8s_resource('loki',
     labels=['observability']
 )
 
-k8s_resource('promtail', 
+k8s_resource('promtail',
     resource_deps=['loki'],
     objects=[
         'promtail:serviceaccount',
@@ -125,8 +125,8 @@ k8s_resource('promtail',
     labels=['observability']
 )
 
-k8s_resource('grafana', 
-    port_forwards=[port_forward(3000, 3000)], 
+k8s_resource('grafana',
+    port_forwards=[port_forward(3000, 3000)],
     resource_deps=['loki'],
     objects=[
         'grafana-datasources:configmap'
@@ -148,26 +148,26 @@ def discover_services():
     """
     services = []
     packages_dir = '../packages'
-    
+
     # List all items in packages/ using shell
     items_output = str(local('ls -1 %s' % packages_dir, quiet=True))
     items = [x.strip() for x in items_output.split('\n') if x.strip()]
-    
+
     for item in items:
         # Skip .template, hidden directories, and README
         if item.startswith('.') or item == 'README.md':
             continue
-        
+
         service_path = packages_dir + '/' + item
-        
+
         # Check for required files using shell test
         dockerfile = service_path + '/Dockerfile'
         kustomization = service_path + '/k8s/overlays/dev/kustomization.yaml'
-        
+
         # Check if files exist
         dockerfile_check = str(local('test -f "%s" && echo "1" || echo "0"' % dockerfile, quiet=True)).strip()
         kustomization_check = str(local('test -f "%s" && echo "1" || echo "0"' % kustomization, quiet=True)).strip()
-        
+
         if dockerfile_check == "1" and kustomization_check == "1":
             services.append({
                 'name': item,
@@ -178,7 +178,7 @@ def discover_services():
             print("  Found service: " + item)
         else:
             print("  Skipped " + item + " (missing Dockerfile or kustomization.yaml)")
-    
+
     return services
 
 # Discover all services
@@ -192,13 +192,13 @@ print("\nConfiguring " + str(len(services)) + " service(s)...")
 for service in services:
     service_name = service['name']
     service_path = service['path']
-    
+
     print("\nSetting up: " + service_name)
-    
+
     # Check if service has its own Tiltfile
     service_tiltfile = service_path + '/Tiltfile'
     has_service_tiltfile = str(local('test -f "%s" && echo "1" || echo "0"' % service_tiltfile, quiet=True)).strip() == "1"
-    
+
     if has_service_tiltfile:
         # Load service-specific Tiltfile
         print("  -> Loading service-specific Tiltfile")
@@ -206,11 +206,11 @@ for service in services:
     else:
         # Fallback: generic configuration with DEV_MODE support
         print("  ⚠ No Tiltfile found, using generic configuration")
-        
+
         # Check if Dockerfile.dev exists for HMR
         dockerfile_dev = service_path + '/Dockerfile.dev'
         has_dockerfile_dev = str(local('test -f "%s" && echo "1" || echo "0"' % dockerfile_dev, quiet=True)).strip() == "1"
-        
+
         # Choose dockerfile based on DEV_MODE
         if dev_mode and has_dockerfile_dev:
             dockerfile = dockerfile_dev
@@ -218,7 +218,7 @@ for service in services:
         else:
             dockerfile = service_path + '/Dockerfile'
             print("  -> Using production Dockerfile")
-        
+
         # Generic docker build with tag that matches kustomization.yaml
         docker_build(
             service_name + ':tilt-dev',
@@ -229,17 +229,17 @@ for service in services:
             ],
             ignore=['node_modules', '.git', 'vendor', '__pycache__', 'dist', 'build', 'target', '.next', '.turbo']
         )
-        
+
         # Apply K8s manifests
         k8s_yaml(kustomize(service_path + '/k8s/overlays/dev'))
-        
+
         # Configure resource
         k8s_resource(
             service_name,
             resource_deps=['citus-coordinator', 'redis', 'redpanda', 'loki'],
             labels=[service_name]
         )
-    
+
     print("  -> Configured: " + service_name)
 
 # ============================================
