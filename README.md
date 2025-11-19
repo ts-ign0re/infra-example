@@ -81,7 +81,8 @@ make tilt-up
 cp infra/.env.sample infra/.env
 
 # 2. Поднимите инфраструктуру (Tilt установится автоматически)
-make tilt-up
+make # чтобы создать контейнеры и кластер
+make tilt-up # чтобы запустить Tilt
 # ✅ Avro схемы регистрируются автоматически!
 
 # 3. Дождитесь готовности сервисов
@@ -180,16 +181,16 @@ make infra-test
   ```
 
 - Разместить данные тенанта на конкретном воркере:
-  1) Узнать shard id: 
+  1) Узнать shard id:
      ```sql
      SELECT citus_get_shard_id_for_distribution_column('tenants'::regclass, 10002);
      ```
-  2) Переместить шард: 
+  2) Переместить шард:
      ```sql
-     SELECT citus_move_shard_placement(<shard_id>, old_node, old_port, 
+     SELECT citus_move_shard_placement(<shard_id>, old_node, old_port,
        'citus-worker-0.citus-worker.dev-infra.svc.cluster.local', 5432);
      ```
-  
+
   В dev среде единственный воркер, поэтому перемещение обычно не требуется.
 
 ## Redis
@@ -257,8 +258,8 @@ make infra-test
   ```javascript
   // Node.js (@kafkajs/confluent-schema-registry)
   const { SchemaRegistry } = require('@kafkajs/confluent-schema-registry');
-  const registry = new SchemaRegistry({ 
-    host: process.env.SCHEMA_REGISTRY_URL 
+  const registry = new SchemaRegistry({
+    host: process.env.SCHEMA_REGISTRY_URL
   });
   ```
   ```python
@@ -353,15 +354,15 @@ export async function logToLoki(req, message, labels = {}) {
   const tenant = req.get('X-Tenant-Id'); // numeric, required
   if (!tenant) return; // or 400/skip
   const tsNs = BigInt(Date.now()) * 1000000n;
-  const stream = { 
-    stream: { service: 'my-api', env: 'dev', ...labels }, 
-    values: [[tsNs.toString(), message]] 
+  const stream = {
+    stream: { service: 'my-api', env: 'dev', ...labels },
+    values: [[tsNs.toString(), message]]
   };
   await fetch(`${LOKI_URL}/loki/api/v1/push`, {
     method: 'POST',
-    headers: { 
-      'content-type': 'application/json', 
-      'X-Scope-OrgID': tenant 
+    headers: {
+      'content-type': 'application/json',
+      'X-Scope-OrgID': tenant
     },
     body: JSON.stringify({ streams: [stream] }),
   });
