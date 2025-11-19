@@ -1,24 +1,13 @@
 -- ============================================
--- V4: Incremental View Updates - Convert to Regular Tables
--- Materialized views → Regular tables для возможности инкрементальных обновлений
+-- V2: Read Views as Tables with Incremental Updates
+-- Read-optimized projections with ROW-level trigger updates
 -- ============================================
 
--- Drop old triggers and functions from V2
-DROP TRIGGER IF EXISTS after_bet_events_insert ON bet_events CASCADE;
-DROP TRIGGER IF EXISTS after_balance_events_insert ON balance_events CASCADE;
-DROP TRIGGER IF EXISTS after_payment_events_insert ON payment_events CASCADE;
-DROP FUNCTION IF EXISTS trigger_refresh_bets_view() CASCADE;
-DROP FUNCTION IF EXISTS trigger_refresh_balance_view() CASCADE;
-DROP FUNCTION IF EXISTS trigger_refresh_payments_view() CASCADE;
-
 -- ============================================
--- CONVERT BETS_VIEW: Materialized View → Table
+-- BETS_VIEW: Regular Table with Triggers
 -- ============================================
 
--- Drop materialized view
-DROP MATERIALIZED VIEW IF EXISTS bets_view CASCADE;
-
--- Create as regular table (with same structure)
+-- Create as regular table
 CREATE TABLE IF NOT EXISTS bets_view (
     tenant_id BIGINT NOT NULL,
     bet_id VARCHAR(255) NOT NULL,
@@ -89,7 +78,9 @@ ON CONFLICT (tenant_id, bet_id) DO NOTHING;
 -- CONVERT PAYMENTS_VIEW: Materialized View → Table
 -- ============================================
 
-DROP MATERIALIZED VIEW IF EXISTS payments_view CASCADE;
+-- ============================================
+-- PAYMENTS_VIEW: Regular Table with Triggers
+-- ============================================
 
 CREATE TABLE IF NOT EXISTS payments_view (
     tenant_id BIGINT NOT NULL,

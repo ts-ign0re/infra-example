@@ -1,51 +1,35 @@
 -- ============================================
--- V2: Materialized Views & Reactive Triggers
--- Read-optimized projections with automatic updates
+-- V2: Read Views as Regular Tables
+-- Read-optimized projections with incremental updates via triggers
 -- ============================================
 
 -- ============================================
 -- 1. BETS PROJECTION - текущее состояние ставок
 -- ============================================
-CREATE MATERIALIZED VIEW IF NOT EXISTS bets_view AS
-WITH latest_bet_events AS (
-  SELECT DISTINCT ON (tenant_id, aggregate_id)
-    tenant_id,
-    aggregate_id as bet_id,
-    event_type,
-    event_data,
-    timestamp,
-    created_at
-  FROM bet_events
-  ORDER BY tenant_id, aggregate_id, timestamp DESC
-)
-SELECT 
-  tenant_id,
-  bet_id,
-  (event_data->>'user_id') as user_id,
-  (event_data->>'amount')::decimal as amount,
-  (event_data->>'odds')::decimal as odds,
-  (event_data->>'selection') as selection,
-  (event_data->>'event_id') as event_id,
-  (event_data->>'market_id') as market_id,
-  CASE 
-    WHEN event_type = 'V1_BET_PLACED' THEN 'placed'
-    WHEN event_type = 'V1_BET_ACCEPTED' THEN 'accepted'
-    WHEN event_type = 'V1_BET_REJECTED' THEN 'rejected'
-    WHEN event_type = 'V1_BET_SETTLED_WIN' THEN 'won'
-    WHEN event_type = 'V1_BET_SETTLED_LOSS' THEN 'lost'
-    WHEN event_type = 'V1_BET_SETTLED_VOID' THEN 'void'
-    WHEN event_type = 'V1_BET_CANCELLED' THEN 'cancelled'
-    ELSE 'unknown'
-  END as status,
-  (event_data->>'payout')::decimal as payout,
-  timestamp as last_updated_timestamp,
-  created_at as last_updated_at
-FROM latest_bet_events;
+CREATE TABLE IF NOT EXISTS bets_view (
+    tenant_id BIGINT NOT NULL,
+    bet_id VARCHAR(255) NOT NULL,
+    idempotency_key VARCHAR(255) NOT NULL,
+    user_id TEXT,
+    amount NUMERIC,
+    odds NUMERIC,
+    selection TEXT,
+    event_id TEXT,
+    market_id TEXT,
+    status TEXT,
+    payout NUMERIC,
+    last_updated_timestamp BIGINT,
+    last_updated_at TIMESTAMP,
+    PRIMARY KEY (tenant_id, bet_id)
+);
 
 CREATE INDEX IF NOT EXISTS idx_bets_view_tenant_user ON bets_view(tenant_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_bets_view_status ON bets_view(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_bets_view_event ON bets_view(tenant_id, event_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_view_pk ON bets_view(tenant_id, bet_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_view_idempotency ON bets_view(tenant_id, idempotency_key);
+
+-- Distribute table
+SELECT create_distributed_table('bets_view', 'tenant_id');
 
 -- ============================================
 -- 2. USER BALANCES PROJECTION
