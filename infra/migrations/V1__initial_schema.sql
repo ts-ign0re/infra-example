@@ -40,7 +40,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- BET EVENTS - все события ставок
 CREATE TABLE IF NOT EXISTS bet_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- bet_id
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS bet_events (
     version INT NOT NULL DEFAULT 1,      -- schema version
     metadata JSONB,                      -- correlation_id, user_agent, etc.
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, id),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
@@ -67,7 +68,7 @@ SELECT create_distributed_table('bet_events', 'tenant_id');
 
 -- PAYMENT EVENTS - все события платежей
 CREATE TABLE IF NOT EXISTS payment_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- payment_id
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS payment_events (
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, id),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
@@ -94,7 +96,7 @@ SELECT create_distributed_table('payment_events', 'tenant_id');
 
 -- BALANCE EVENTS - все события балансов
 CREATE TABLE IF NOT EXISTS balance_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- user_id or balance_id
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
@@ -104,6 +106,7 @@ CREATE TABLE IF NOT EXISTS balance_events (
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, id),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
@@ -121,7 +124,7 @@ SELECT create_distributed_table('balance_events', 'tenant_id');
 
 -- COMPLIANCE EVENTS - все события комплаенса
 CREATE TABLE IF NOT EXISTS compliance_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- user_id or check_id
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
@@ -131,6 +134,7 @@ CREATE TABLE IF NOT EXISTS compliance_events (
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, id),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
@@ -148,7 +152,7 @@ SELECT create_distributed_table('compliance_events', 'tenant_id');
 
 -- TENANT EVENTS - события управления тенантами
 CREATE TABLE IF NOT EXISTS tenant_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- tenant_id as string
     idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
@@ -158,6 +162,7 @@ CREATE TABLE IF NOT EXISTS tenant_events (
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, id),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
@@ -175,7 +180,7 @@ SELECT create_distributed_table('tenant_events', 'tenant_id');
 -- SYSTEM EVENTS - аналитика и системные события (некритичные)
 -- ⚠️ Для system_events idempotency_key опциональный, т.к. эти события некритичны
 CREATE TABLE IF NOT EXISTS system_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255),
     event_type VARCHAR(100) NOT NULL,
@@ -184,6 +189,7 @@ CREATE TABLE IF NOT EXISTS system_events (
     version INT NOT NULL DEFAULT 1,
     metadata JSONB,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, id),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
