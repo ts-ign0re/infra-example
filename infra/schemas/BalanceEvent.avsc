@@ -4,9 +4,10 @@
   "namespace": "io.sportify.balances",
   "doc": "События перемещения средств балансов клиентов",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "tenant_id", "type": "long" },
-    { "name": "aggregate_id", "type": "string", "doc": "ID баланса клиента" },
+    { "name": "id", "type": "string", "doc": "Уникальный ID события (UUID)" },
+    { "name": "tenant_id", "type": "long", "doc": "ID тенанта (numeric)" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID баланса клиента (balance-{user_id})" },
+    { "name": "idempotency_key", "type": "string", "doc": "Уникальный ключ для защиты от дублирования запросов. Генерируется клиентом и должен быть стабильным при retry." },
     {
       "name": "event_type",
       "type": {
@@ -31,9 +32,9 @@
       "type": { "type": "map", "values": ["null", "string", "long", "double", "boolean"] },
       "doc": "Данные события (user_id, amount, balance, bet_id, payment_id, etc.). Все суммы в центах (long)!"
     },
-    { "name": "timestamp", "type": "long" },
-    { "name": "version", "type": "int", "default": 1 },
     { "name": "event_name", "type": "string", "doc": "Полное имя события (v1.balances.balance.reserved и т.п.)" },
-    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null }
+    { "name": "timestamp", "type": "long", "doc": "Unix timestamp в миллисекундах" },
+    { "name": "version", "type": "int", "default": 1, "doc": "Версия схемы события" },
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null, "doc": "Дополнительные метаданные (correlation_id, related_to, etc.)" }
   ]
 }

@@ -6,7 +6,8 @@
   "fields": [
     { "name": "id", "type": "string", "doc": "Уникальный ID события (UUID)" },
     { "name": "tenant_id", "type": "long", "doc": "ID тенанта (numeric)" },
-    { "name": "aggregate_id", "type": "string", "doc": "ID ставки (aggregate root)" },
+    { "name": "aggregate_id", "type": "string", "doc": "ID ставки (bet-{UUID})" },
+    { "name": "idempotency_key", "type": "string", "doc": "Уникальный ключ для защиты от дублирования запросов. Генерируется клиентом и должен быть стабильным при retry." },
     {
       "name": "event_type",
       "type": {
@@ -33,6 +34,6 @@
     { "name": "event_name", "type": "string", "doc": "Полное имя события (v1.bets.bet.placed и т.п.)" },
     { "name": "timestamp", "type": "long", "doc": "Unix timestamp в миллисекундах" },
     { "name": "version", "type": "int", "default": 1, "doc": "Версия схемы события" },
-    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null, "doc": "Опциональные метаданные" }
+    { "name": "metadata", "type": ["null", {"type": "map", "values": "string"}], "default": null, "doc": "Дополнительные метаданные (correlation_id, user_agent, ip_address, etc.)" }
   ]
 }

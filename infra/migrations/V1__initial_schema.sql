@@ -43,11 +43,12 @@ CREATE TABLE IF NOT EXISTS bet_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- bet_id
+    idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_BET_PLACED, V1_BET_SETTLED, etc.
     event_data JSONB NOT NULL,
     timestamp BIGINT NOT NULL,           -- Unix timestamp ms
     version INT NOT NULL DEFAULT 1,      -- schema version
-    metadata JSONB,                      -- contains idempotency_key, user_agent, etc.
+    metadata JSONB,                      -- correlation_id, user_agent, etc.
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
@@ -58,6 +59,10 @@ CREATE INDEX IF NOT EXISTS idx_bet_events_tenant_aggregate ON bet_events(tenant_
 CREATE INDEX IF NOT EXISTS idx_bet_events_event_type ON bet_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_bet_events_timestamp ON bet_events(timestamp);
 
+-- Unique constraint для idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bet_events_idempotency_unique 
+ON bet_events(tenant_id, idempotency_key);
+
 SELECT create_distributed_table('bet_events', 'tenant_id');
 
 -- PAYMENT EVENTS - все события платежей
@@ -65,6 +70,7 @@ CREATE TABLE IF NOT EXISTS payment_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- payment_id
+    idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_PAYMENTS_DEPOSIT_CREATED, etc.
     event_data JSONB NOT NULL,
     timestamp BIGINT NOT NULL,
@@ -80,6 +86,10 @@ CREATE INDEX IF NOT EXISTS idx_payment_events_tenant_aggregate ON payment_events
 CREATE INDEX IF NOT EXISTS idx_payment_events_event_type ON payment_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_payment_events_timestamp ON payment_events(timestamp);
 
+-- Unique constraint для idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_events_idempotency_unique 
+ON payment_events(tenant_id, idempotency_key);
+
 SELECT create_distributed_table('payment_events', 'tenant_id');
 
 -- BALANCE EVENTS - все события балансов
@@ -87,6 +97,7 @@ CREATE TABLE IF NOT EXISTS balance_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- user_id or balance_id
+    idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_BALANCE_ADJUSTED, etc.
     event_data JSONB NOT NULL,
     timestamp BIGINT NOT NULL,
@@ -102,6 +113,10 @@ CREATE INDEX IF NOT EXISTS idx_balance_events_tenant_aggregate ON balance_events
 CREATE INDEX IF NOT EXISTS idx_balance_events_event_type ON balance_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_balance_events_timestamp ON balance_events(timestamp);
 
+-- Unique constraint для idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_balance_events_idempotency_unique 
+ON balance_events(tenant_id, idempotency_key);
+
 SELECT create_distributed_table('balance_events', 'tenant_id');
 
 -- COMPLIANCE EVENTS - все события комплаенса
@@ -109,6 +124,7 @@ CREATE TABLE IF NOT EXISTS compliance_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- user_id or check_id
+    idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_KYC_VERIFIED, V1_LIMIT_EXCEEDED, etc.
     event_data JSONB NOT NULL,
     timestamp BIGINT NOT NULL,
@@ -124,6 +140,10 @@ CREATE INDEX IF NOT EXISTS idx_compliance_events_tenant_aggregate ON compliance_
 CREATE INDEX IF NOT EXISTS idx_compliance_events_event_type ON compliance_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_compliance_events_timestamp ON compliance_events(timestamp);
 
+-- Unique constraint для idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_compliance_events_idempotency_unique 
+ON compliance_events(tenant_id, idempotency_key);
+
 SELECT create_distributed_table('compliance_events', 'tenant_id');
 
 -- TENANT EVENTS - события управления тенантами
@@ -131,6 +151,7 @@ CREATE TABLE IF NOT EXISTS tenant_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
     aggregate_id VARCHAR(255) NOT NULL,  -- tenant_id as string
+    idempotency_key VARCHAR(255) NOT NULL,  -- уникальный ключ от клиента
     event_type VARCHAR(100) NOT NULL,    -- V1_TENANT_CREATED, V1_TENANT_PLAN_CHANGED, etc.
     event_data JSONB NOT NULL,
     timestamp BIGINT NOT NULL,
@@ -145,9 +166,14 @@ CREATE INDEX IF NOT EXISTS idx_tenant_events_aggregate_id ON tenant_events(aggre
 CREATE INDEX IF NOT EXISTS idx_tenant_events_event_type ON tenant_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_tenant_events_timestamp ON tenant_events(timestamp);
 
+-- Unique constraint для idempotency
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_events_idempotency_unique 
+ON tenant_events(tenant_id, idempotency_key);
+
 SELECT create_distributed_table('tenant_events', 'tenant_id');
 
 -- SYSTEM EVENTS - аналитика и системные события (некритичные)
+-- ⚠️ Для system_events idempotency_key опциональный, т.к. эти события некритичны
 CREATE TABLE IF NOT EXISTS system_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id BIGINT NOT NULL,
@@ -168,26 +194,7 @@ CREATE INDEX IF NOT EXISTS idx_system_events_timestamp ON system_events(timestam
 SELECT create_distributed_table('system_events', 'tenant_id');
 
 -- ============================================
--- IDEMPOTENCY PROTECTION
--- Unique constraints to prevent duplicate critical operations
+-- IDEMPOTENCY PROTECTION (теперь встроено в таблицы выше)
+-- Unique constraints на idempotency_key уже созданы при CREATE TABLE
 -- ============================================
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_events_idempotency_unique 
-ON payment_events(tenant_id, ((metadata->>'idempotency_key'))) 
-WHERE metadata->>'idempotency_key' IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_bet_events_idempotency_unique 
-ON bet_events(tenant_id, ((metadata->>'idempotency_key'))) 
-WHERE metadata->>'idempotency_key' IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_balance_events_idempotency_unique 
-ON balance_events(tenant_id, ((metadata->>'idempotency_key'))) 
-WHERE metadata->>'idempotency_key' IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_compliance_events_idempotency_unique 
-ON compliance_events(tenant_id, ((metadata->>'idempotency_key'))) 
-WHERE metadata->>'idempotency_key' IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_events_idempotency_unique 
-ON tenant_events(tenant_id, ((metadata->>'idempotency_key'))) 
-WHERE metadata->>'idempotency_key' IS NOT NULL;

@@ -486,7 +486,8 @@ v1.system       → все системные события
 ```jsx
 // Node.js - отправка события
 const event = {
-  event_type: "v1.payments.deposit.completed",
+  event_type: "V1_PAYMENTS_DEPOSIT_COMPLETED",  // UPPER_SNAKE_CASE в enum
+  event_name: "v1.payments.deposit.completed",  // dot-notation для людей
   event_data: {
     amount: 10000,  // рендерим как $100.00
     currency: "USD"
@@ -610,14 +611,15 @@ const paymentEventType = avro.Type.forSchema(paymentEventSchema);
 const producer = kafka.producer();
 
 await producer.send({
-  topic: 'v1.payments',
+  topic: 'V1_PAYMENTS',
   messages: [{
     key: 'payment-123',
     value: paymentEventType.toBuffer({
       id: "evt-001",
-      tenant_id: "tenant-1",
+      tenant_id: 10001,  // long, не string
       aggregate_id: "payment-123",
-      event_type: "v1.payments.deposit.completed",
+      event_type: "V1_PAYMENTS_DEPOSIT_COMPLETED",
+      event_name: "v1.payments.deposit.completed",
       event_data: {
         user_id: "user-456",
         amount: 10000,  // $100.00 в центах
@@ -625,7 +627,7 @@ await producer.send({
         payment_method: "credit_card",
         provider: "stripe"
       },
-      timestamp: [Date.now](http://Date.now)(),
+      timestamp: Date.now(),
       version: 1
     })
   }]
@@ -642,7 +644,7 @@ await [consumer.run](http://consumer.run)({
 
     // Обработка события
     switch(event.event_type) {
-      case 'v1.payments.deposit.completed':
+      case 'V1_PAYMENTS_DEPOSIT_COMPLETED':
         await handleDepositCompleted(event);
         break;
       // ...
@@ -672,9 +674,10 @@ $encoder = new BinaryEncoder($io);
 
 $event = [
     'id' => 'evt-001',
-    'tenant_id' => 'tenant-1',
+    'tenant_id' => 10001,  // long, не string
     'aggregate_id' => 'payment-123',
-    'event_type' => 'v1.payments.deposit.completed',
+    'event_type' => 'V1_PAYMENTS_DEPOSIT_COMPLETED',
+    'event_name' => 'v1.payments.deposit.completed',
     'event_data' => [
         'user_id' => 'user-456',
         'amount' => 10000,  // $100.00 в центах
@@ -698,7 +701,7 @@ $event = $reader->read($decoder);
 
 // Обработка события
 switch ($event['event_type']) {
-    case 'v1.payments.deposit.completed':
+    case 'V1_PAYMENTS_DEPOSIT_COMPLETED':
         handleDepositCompleted($event);
         break;
     // ...
@@ -725,7 +728,7 @@ switch ($event['event_type']) {
     },
     {
       "name": "tenant_id",
-      "type": "string",
+      "type": "long",
       "doc": "ID тенанта (white-label оператора)"
     },
     {
@@ -740,21 +743,21 @@ switch ($event['event_type']) {
         "name": "PaymentEventType",
         "doc": "Типы событий платежей. ВАЖНО: добавлять новые события только В КОНЕЦ списка!",
         "symbols": [
-          "v1.payments.deposit.created",
-          "v1.payments.deposit.pending",
-          "v1.payments.deposit.completed",
-          "v1.payments.deposit.failed",
-          "v1.payments.deposit.refunded",
-          "v1.payments.withdrawal.requested",
-          "v1.payments.withdrawal.pending",
-          "v1.payments.withdrawal.approved",
-          "v1.payments.withdrawal.completed",
-          "v1.payments.withdrawal.rejected",
-          "v1.payments.withdrawal.cancelled",
-          "v1.payments.chargeback.received",
-          "v1.payments.chargeback.disputed",
-          "v1.payments.chargeback.won",
-          "v1.payments.chargeback.lost"
+          "V1_PAYMENTS_DEPOSIT_CREATED",
+          "V1_PAYMENTS_DEPOSIT_PENDING",
+          "V1_PAYMENTS_DEPOSIT_COMPLETED",
+          "V1_PAYMENTS_DEPOSIT_FAILED",
+          "V1_PAYMENTS_DEPOSIT_REFUNDED",
+          "V1_PAYMENTS_WITHDRAWAL_REQUESTED",
+          "V1_PAYMENTS_WITHDRAWAL_PENDING",
+          "V1_PAYMENTS_WITHDRAWAL_APPROVED",
+          "V1_PAYMENTS_WITHDRAWAL_COMPLETED",
+          "V1_PAYMENTS_WITHDRAWAL_REJECTED",
+          "V1_PAYMENTS_WITHDRAWAL_CANCELLED",
+          "V1_PAYMENTS_CHARGEBACK_RECEIVED",
+          "V1_PAYMENTS_CHARGEBACK_DISPUTED",
+          "V1_PAYMENTS_CHARGEBACK_WON",
+          "V1_PAYMENTS_CHARGEBACK_LOST"
         ]
       },
       "doc": "Тип события из списка symbols"
@@ -810,7 +813,7 @@ switch ($event['event_type']) {
     },
     {
       "name": "tenant_id",
-      "type": "string",
+      "type": "long",
       "doc": "ID тенанта (white-label оператора)"
     },
     {
@@ -825,13 +828,13 @@ switch ($event['event_type']) {
         "name": "BetEventType",
         "doc": "Типы событий ставок. ВАЖНО: добавлять новые события только В КОНЕЦ списка!",
         "symbols": [
-          "[v1.bets.bet](http://v1.bets.bet).placed",
-          "[v1.bets.bet](http://v1.bets.bet).reserved",
-          "[v1.bets.bet](http://v1.bets.bet).confirmed",
-          "[v1.bets.bet](http://v1.bets.bet).rejected",
-          "[v1.bets.bet](http://v1.bets.bet).settled",
-          "[v1.bets.bet](http://v1.bets.bet).cancelled",
-          "[v1.bets.bet](http://v1.bets.bet).voided"
+          "V1_BETS_BET_PLACED",
+          "V1_BETS_BET_RESERVED",
+          "V1_BETS_BET_CONFIRMED",
+          "V1_BETS_BET_REJECTED",
+          "V1_BETS_BET_SETTLED",
+          "V1_BETS_BET_CANCELLED",
+          "V1_BETS_BET_VOIDED"
         ]
       },
       "doc": "Тип события из списка symbols"
@@ -887,7 +890,7 @@ switch ($event['event_type']) {
     },
     {
       "name": "tenant_id",
-      "type": "string",
+      "type": "long",
       "doc": "ID тенанта"
     },
     {
@@ -902,15 +905,15 @@ switch ($event['event_type']) {
         "name": "BalanceEventType",
         "doc": "Типы событий балансов. ВАЖНО: добавлять новые события только В КОНЕЦ списка!",
         "symbols": [
-          "v1.balances.balance.reserved",
-          "v1.balances.balance.released",
-          "v1.balances.balance.debited",
-          "v1.balances.balance.credited",
-          "v1.balances.bonus.added",
-          "v1.balances.bonus.debited",
-          "v1.balances.bonus.converted",
-          "v1.balances.bonus.expired",
-          "v1.balances.bonus.cancelled"
+          "V1_BALANCES_BALANCE_RESERVED",
+          "V1_BALANCES_BALANCE_RELEASED",
+          "V1_BALANCES_BALANCE_DEBITED",
+          "V1_BALANCES_BALANCE_CREDITED",
+          "V1_BALANCES_BONUS_ADDED",
+          "V1_BALANCES_BONUS_DEBITED",
+          "V1_BALANCES_BONUS_CONVERTED",
+          "V1_BALANCES_BONUS_EXPIRED",
+          "V1_BALANCES_BONUS_CANCELLED"
         ]
       }
     },
@@ -955,7 +958,7 @@ switch ($event['event_type']) {
     },
     {
       "name": "tenant_id",
-      "type": "string"
+      "type": "long"
     },
     {
       "name": "aggregate_id",
@@ -969,31 +972,31 @@ switch ($event['event_type']) {
         "name": "ComplianceEventType",
         "doc": "Типы compliance событий. ВАЖНО: добавлять новые события только В КОНЕЦ списка!",
         "symbols": [
-          "v1.compliance.kyc.started",
-          "v1.compliance.kyc.completed",
-          "v1.compliance.kyc.failed",
-          "v1.compliance.document.uploaded",
-          "v1.compliance.address.verified",
-          "v1.compliance.aml.screened",
-          "v1.compliance.exclusion.activated",
-          "v1.compliance.exclusion.expired",
-          "v1.compliance.cooling_off.activated",
-          "v1.compliance.limit.loss_exceeded",
-          "v1.compliance.limit.deposit_set",
-          "v1.compliance.limit.deposit_exceeded",
-          "v1.compliance.rg_alert.triggered",
-          "v1.compliance.risk.calculated",
-          "v1.compliance.risk.detected",
-          "v1.compliance.fraud.detected",
-          "v1.compliance.multi_accounting.suspected",
-          "v1.compliance.user.blocked",
-          "v1.compliance.user.unblocked",
-          "v1.compliance.ip.blocked",
-          "v1.compliance.jurisdiction.denied",
-          "v1.compliance.violation.detected",
-          "v1.compliance.underage.attempted",
-          "v1.compliance.jurisdiction.unauthorized",
-          "v1.compliance.transaction.suspicious"
+          "V1_COMPLIANCE_KYC_STARTED",
+          "V1_COMPLIANCE_KYC_COMPLETED",
+          "V1_COMPLIANCE_KYC_FAILED",
+          "V1_COMPLIANCE_DOCUMENT_UPLOADED",
+          "V1_COMPLIANCE_ADDRESS_VERIFIED",
+          "V1_COMPLIANCE_AML_SCREENED",
+          "V1_COMPLIANCE_EXCLUSION_ACTIVATED",
+          "V1_COMPLIANCE_EXCLUSION_EXPIRED",
+          "V1_COMPLIANCE_COOLING_OFF_ACTIVATED",
+          "V1_COMPLIANCE_LIMIT_LOSS_EXCEEDED",
+          "V1_COMPLIANCE_LIMIT_DEPOSIT_SET",
+          "V1_COMPLIANCE_LIMIT_DEPOSIT_EXCEEDED",
+          "V1_COMPLIANCE_RG_ALERT_TRIGGERED",
+          "V1_COMPLIANCE_RISK_CALCULATED",
+          "V1_COMPLIANCE_RISK_DETECTED",
+          "V1_COMPLIANCE_FRAUD_DETECTED",
+          "V1_COMPLIANCE_MULTI_ACCOUNTING_SUSPECTED",
+          "V1_COMPLIANCE_USER_BLOCKED",
+          "V1_COMPLIANCE_USER_UNBLOCKED",
+          "V1_COMPLIANCE_IP_BLOCKED",
+          "V1_COMPLIANCE_JURISDICTION_DENIED",
+          "V1_COMPLIANCE_VIOLATION_DETECTED",
+          "V1_COMPLIANCE_UNDERAGE_ATTEMPTED",
+          "V1_COMPLIANCE_JURISDICTION_UNAUTHORIZED",
+          "V1_COMPLIANCE_TRANSACTION_SUSPICIOUS"
         ]
       }
     },
@@ -1093,10 +1096,10 @@ switch ($event['event_type']) {
 
 ```json
 "symbols": [
-  "v1.payments.deposit.created",
-  "v1.payments.deposit.pending",
+  "V1_PAYMENTS_DEPOSIT_CREATED",
+  "V1_PAYMENTS_DEPOSIT_PENDING",
   // ... существующие события
-  "v1.payments.deposit.expired"  // ← НОВОЕ событие В КОНЦЕ!
+  "V1_PAYMENTS_DEPOSIT_EXPIRED"  // ← НОВОЕ событие В КОНЦЕ!
 ]
 ```
 

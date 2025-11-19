@@ -24,6 +24,7 @@ k8s_yaml([
   'k8s/citus-coordinator.yaml',
   'k8s/citus-worker.yaml',
   'k8s/citus-init.yaml',
+  'k8s/cronjob-refresh-views.yaml',
   'k8s/observability/loki.yaml',
   'k8s/observability/promtail.yaml',
   'k8s/observability/grafana.yaml',

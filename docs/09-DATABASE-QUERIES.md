@@ -152,9 +152,9 @@ app.post('/bets', extractTenantId, async (req: any, res) => {
     await client.query('BEGIN');
     
     // 1. Проверить idempotency key в materialized view
-    // (триггеры автоматически обновляют view после INSERT)
+    // Views автоматически содержат idempotency_key из метаданных
     const existing = await client.query(`
-      SELECT bet_id FROM bets_view 
+      SELECT bet_id, idempotency_key FROM bets_view 
       WHERE tenant_id = $1 
         AND idempotency_key = $2
       LIMIT 1
@@ -165,7 +165,7 @@ app.post('/bets', extractTenantId, async (req: any, res) => {
       const bet = await client.query(`
         SELECT * FROM bets_view 
         WHERE tenant_id = $1 AND bet_id = $2
-      `, [tenantId, existing.rows[0].aggregate_id]);
+      `, [tenantId, existing.rows[0].bet_id]);
       
       await client.query('COMMIT');
       return res.status(200).json({ 
@@ -377,7 +377,7 @@ class BettingAPI {
                 ");
                 $stmt->execute([
                     ':tenant_id' => $tenantId,
-                    ':bet_id' => $existing['aggregate_id']
+                    ':bet_id' => $existing['bet_id']
                 ]);
                 
                 $this->db->commit();
@@ -653,8 +653,11 @@ app.post('/bets', extractTenantId, async (req: TenantRequest, res) => {
 
 ### 2. Чтение событий (SELECT)
 
+> ⚠️ **ВАЖНО:** Этот раздел для **audit/debugging** целей. Для бизнес-логики **ВСЕГДА используйте materialized views** (см. раздел выше).
+
 ```typescript
-// Получить все события для конкретной ставки
+// ⚠️ Только для audit log, time travel, debugging!
+// ❌ НЕ используйте для проверки idempotency или бизнес-логики!
 export async function getBetEvents(
   tenantId: number,
   aggregateId: string
@@ -721,7 +724,12 @@ app.get('/bets/:betId/events', extractTenantId, async (req: TenantRequest, res) 
 
 ### 3. Построение проекции (текущее состояние)
 
+> ⚠️ **УСТАРЕВШИЙ ПАТТЕРН!** Не используйте ручное построение проекций - они уже готовы в materialized views!
+> 
+> Этот раздел оставлен только для понимания концепции Event Sourcing.
+
 ```typescript
+// ❌ НЕ ДЕЛАЙТЕ ТАК - используйте bets_view вместо этого!
 interface BetProjection {
   bet_id: string;
   user_id: string;
@@ -732,6 +740,7 @@ interface BetProjection {
   payout?: number;
 }
 
+// ❌ МЕДЛЕННО! Восстановление из событий вручную
 export async function buildBetProjection(
   tenantId: number,
   betId: string
@@ -778,7 +787,7 @@ export async function buildBetProjection(
   return projection as BetProjection;
 }
 
-// Использование
+// ❌ НЕПРАВИЛЬНО - медленное восстановление из событий
 app.get('/bets/:betId', extractTenantId, async (req: TenantRequest, res) => {
   try {
     const bet = await buildBetProjection(
@@ -791,6 +800,28 @@ app.get('/bets/:betId', extractTenantId, async (req: TenantRequest, res) => {
     }
     
     res.json(bet);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch bet' });
+  }
+});
+```
+
+**✅ ПРАВИЛЬНЫЙ СПОСОБ - читать из materialized view:**
+
+```typescript
+// ✅ БЫСТРО! Используем готовую проекцию
+app.get('/bets/:betId', extractTenantId, async (req: TenantRequest, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM bets_view 
+      WHERE tenant_id = $1 AND bet_id = $2
+    `, [req.tenantId, req.params.betId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bet not found' });
+    }
+    
+    res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch bet' });
   }
@@ -813,29 +844,28 @@ export async function processPayment(
   try {
     await client.query('BEGIN');
     
-    // 1. Проверяем, не обработан ли уже этот запрос
+    // 1. Проверяем idempotency в materialized view (БЫСТРО!)
     const checkQuery = `
-      SELECT id, event_data 
-      FROM payment_events 
+      SELECT payment_id 
+      FROM payments_view 
       WHERE tenant_id = $1 
-        AND (metadata->>'idempotency_key') = $2
+        AND idempotency_key = $2
       LIMIT 1
     `;
     
     const existing = await client.query(checkQuery, [tenantId, idempotencyKey]);
     
     if (existing.rows.length > 0) {
-      // Запрос уже обработан - возвращаем существующий результат
+      // Запрос уже обработан - возвращаем из view
       await client.query('COMMIT');
-      const existingData = existing.rows[0].event_data;
       return { 
         success: true, 
-        payment_id: existingData.payment_id,
+        payment_id: existing.rows[0].payment_id,
         duplicate: true 
       };
     }
     
-    // 2. Создаем событие платежа с idempotency key
+    // 2. Создаем событие платежа с idempotency key в metadata
     const paymentId = randomUUID();
     await client.query(`
       INSERT INTO payment_events (
@@ -1316,12 +1346,12 @@ class PaymentService {
         $this->db->beginTransaction();
         
         try {
-            // 1. Проверяем, не обработан ли уже этот запрос
+            // 1. Проверяем idempotency в materialized view (БЫСТРО!)
             $checkStmt = $this->db->prepare("
-                SELECT id, event_data 
-                FROM payment_events 
+                SELECT payment_id 
+                FROM payments_view 
                 WHERE tenant_id = :tenant_id 
-                  AND metadata->>'idempotency_key' = :idempotency_key
+                  AND idempotency_key = :idempotency_key
                 LIMIT 1
             ");
             
@@ -1333,17 +1363,16 @@ class PaymentService {
             $existing = $checkStmt->fetch();
             
             if ($existing) {
-                // Запрос уже обработан - возвращаем существующий результат
+                // Запрос уже обработан - возвращаем из view
                 $this->db->commit();
-                $existingData = json_decode($existing['event_data'], true);
                 return [
                     'success' => true,
-                    'payment_id' => $existingData['payment_id'],
+                    'payment_id' => $existing['payment_id'],
                     'duplicate' => true
                 ];
             }
             
-            // 2. Создаем событие платежа с idempotency key
+            // 2. Создаем событие платежа с idempotency key в metadata
             $paymentId = $this->generateUUID();
             $timestamp = round(microtime(true) * 1000);
             

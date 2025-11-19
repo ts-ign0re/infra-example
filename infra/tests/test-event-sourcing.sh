@@ -10,19 +10,25 @@ echo ""
 
 # Test 1: Insert bet event
 echo "1. Inserting test bet event..."
-kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
-  INSERT INTO bet_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version)
+IDEMPOTENCY_KEY_BET="test-bet-$(date +%s)-$$"
+if kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
+  INSERT INTO bet_events (id, tenant_id, aggregate_id, idempotency_key, event_type, event_data, timestamp, version)
   VALUES (
     gen_random_uuid(),
     10001,
     'bet-quick-test-$(date +%s)',
+    '$IDEMPOTENCY_KEY_BET',
     'V1_BETS_BET_PLACED',
     '{\"user_id\": \"user-test\", \"stake\": 100, \"odds\": 2.0, \"fixture_id\": \"test-fixture\"}'::jsonb,
     EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
     1
   );
-" >/dev/null 2>&1
-echo "   → Event inserted"
+" 2>&1; then
+  echo "   → Event inserted"
+else
+  echo "   → Failed to insert event"
+  exit 1
+fi
 
 # Test 2: Check view refreshed
 echo "2. Checking materialized view refresh..."
@@ -49,16 +55,16 @@ IDEMPOTENCY_KEY="test-payment-$(date +%s)-$$"
 EXTERNAL_ID="ext-$IDEMPOTENCY_KEY"
 
 kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
-  INSERT INTO payment_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version, metadata)
+  INSERT INTO payment_events (id, tenant_id, aggregate_id, idempotency_key, event_type, event_data, timestamp, version)
   VALUES (
     gen_random_uuid(),
     10001,
     'payment-idempotency-test',
+    '$IDEMPOTENCY_KEY',
     'V1_PAYMENTS_DEPOSIT_CREATED',
     '{\"user_id\": \"user-test\", \"amount\": 1000, \"external_id\": \"$EXTERNAL_ID\"}'::jsonb,
     EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
-    1,
-    '{\"idempotency_key\": \"$IDEMPOTENCY_KEY\"}'::jsonb
+    1
   );
 " >/dev/null 2>&1
 
@@ -78,19 +84,19 @@ else
   echo "   → View refresh issue (found $duplicate_result payments with external_id)"
 fi
 
-# Try duplicate insert (should fail due to metadata->idempotency_key unique constraint)
+# Try duplicate insert (should fail due to idempotency_key unique constraint)
 set +e  # Temporarily disable exit on error
 duplicate_error=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
-  INSERT INTO payment_events (id, tenant_id, aggregate_id, event_type, event_data, timestamp, version, metadata)
+  INSERT INTO payment_events (id, tenant_id, aggregate_id, idempotency_key, event_type, event_data, timestamp, version)
   VALUES (
     gen_random_uuid(),
     10001,
     'payment-idempotency-test-2',
+    '$IDEMPOTENCY_KEY',
     'V1_PAYMENTS_DEPOSIT_CREATED',
     '{\"user_id\": \"user-test\", \"amount\": 2000, \"external_id\": \"$EXTERNAL_ID-duplicate\"}'::jsonb,
     EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
-    1,
-    '{\"idempotency_key\": \"$IDEMPOTENCY_KEY\"}'::jsonb
+    1
   );
 " 2>&1)
 set -e  # Re-enable exit on error
@@ -108,16 +114,15 @@ echo "5. Verifying triggers..."
 trigger_count=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -tAc "
   SELECT COUNT(*) FROM pg_trigger 
   WHERE tgname IN (
-    'after_bet_events_insert',
-    'after_balance_events_insert',
-    'after_payment_events_insert'
+    'after_bet_events_insert_incremental',
+    'after_payment_events_insert_incremental'
   )
 " 2>/dev/null)
 
-if [ "$trigger_count" = "3" ]; then
-  echo "   → All 3 reactive triggers configured"
+if [ "$trigger_count" = "2" ]; then
+  echo "   → All 2 incremental triggers configured"
 else
-  echo "   → Expected 3 triggers, found $trigger_count"
+  echo "   → Expected 2 triggers, found $trigger_count"
 fi
 
 echo ""

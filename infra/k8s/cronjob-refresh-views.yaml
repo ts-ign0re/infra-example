@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: refresh-aggregate-views
+  namespace: dev-infra
+spec:
+  schedule: "*/5 * * * *"  # Каждые 5 минут
+  concurrencyPolicy: Forbid  # Не запускать если предыдущий еще работает
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: refresh-views
+            image: postgres:15
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Refreshing aggregate views..."
+              psql "$DATABASE_URL" -c "SELECT refresh_aggregate_views();"
+              echo "Aggregate views refreshed successfully"
+            env:
+            - name: DATABASE_URL
+              value: "postgresql://app:app@citus-coordinator.dev-infra.svc.cluster.local:5432/app"
