@@ -71,7 +71,7 @@ generate-types-php:
 	bash $(INFRA_DIR)/scripts/generate-types-php.sh
 
 tilt-up:
-	@bash $(INFRA_DIR)/scripts/check-k8s.sh && \
+	@bash scripts/check-k8s-setup.sh && \
 	kubectl apply -f $(INFRA_DIR)/k8s/namespace.yaml && \
 	TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh) && \
 	cd $(INFRA_DIR) && DEV_MODE=true $$TILT_BIN up --stream=true
@@ -80,7 +80,7 @@ tilt-down:
 	@TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh); \
 	cd $(INFRA_DIR) && $$TILT_BIN down
 integration:
-	@bash $(INFRA_DIR)/scripts/check-k8s.sh && \
+	@bash scripts/check-k8s-setup.sh && \
 	TILT_BIN=$$(bash $(INFRA_DIR)/scripts/ensure-tilt.sh) && \
 	kubectl apply -f $(INFRA_DIR)/k8s/namespace.yaml && \
 	( cd $(INFRA_DIR) && $$TILT_BIN ci ) && \
