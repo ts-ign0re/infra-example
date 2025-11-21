@@ -31,33 +31,10 @@ else
   exit 1
 fi
 
-# Test 2: Manually UPSERT into view (simulating application behavior)
-echo "2. Manually updating bets_view (application-level)..."
-kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
-  INSERT INTO bets_view (
-    tenant_id, bet_id, idempotency_key, user_id, 
-    amount, odds, selection, status, last_updated_timestamp, last_updated_at
-  )
-  SELECT 
-    tenant_id,
-    aggregate_id as bet_id,
-    idempotency_key,
-    (event_data->>'user_id') as user_id,
-    (event_data->>'stake')::decimal as amount,
-    (event_data->>'odds')::decimal as odds,
-    (event_data->>'fixture_id') as selection,
-    'placed' as status,
-    timestamp as last_updated_timestamp,
-    created_at as last_updated_at
-  FROM bet_events
-  WHERE tenant_id = 10001 
-    AND aggregate_id = '$BET_AGGREGATE_ID'
-  ORDER BY timestamp DESC
-  LIMIT 1
-  ON CONFLICT (tenant_id, bet_id) DO UPDATE SET
-    status = EXCLUDED.status,
-    last_updated_timestamp = EXCLUDED.last_updated_timestamp;
-" >/dev/null 2>&1
+# Test 2: Refresh materialized views (cron behavior)
+echo "2. Refreshing materialized views..."
+kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -c "SELECT refresh_aggregate_views();" >/dev/null 2>&1
 
 # Test 3: Check view was updated
 echo "3. Checking bets_view was updated..."
@@ -86,37 +63,10 @@ kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
   );
 " >/dev/null 2>&1
 
-# Wait and update payments_view manually
+echo "   → Refreshing materialized views after payment..."
 sleep 1
-
-echo "   → Updating payments_view (application-level)..."
-kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -c "
-  INSERT INTO payments_view (
-    tenant_id, payment_id, idempotency_key, user_id,
-    amount, currency, payment_type, status,
-    external_id, last_updated_timestamp, last_updated_at
-  )
-  SELECT 
-    tenant_id,
-    aggregate_id as payment_id,
-    idempotency_key,
-    (event_data->>'user_id') as user_id,
-    (event_data->>'amount')::decimal as amount,
-    COALESCE((event_data->>'currency'), 'USD') as currency,
-    'deposit' as payment_type,
-    'created' as status,
-    (event_data->>'external_id') as external_id,
-    timestamp as last_updated_timestamp,
-    created_at as last_updated_at
-  FROM payment_events
-  WHERE tenant_id = 10001 
-    AND aggregate_id = '$PAYMENT_AGGREGATE_ID'
-  ORDER BY timestamp DESC
-  LIMIT 1
-  ON CONFLICT (tenant_id, payment_id) DO UPDATE SET
-    status = EXCLUDED.status,
-    last_updated_timestamp = EXCLUDED.last_updated_timestamp;
-" >/dev/null 2>&1
+kubectl -n "$NS" exec -i deploy/citus-coordinator -- \
+  psql -U app -d app -c "SELECT refresh_aggregate_views();" >/dev/null 2>&1
 
 # Check that payment appears in view
 duplicate_result=$(kubectl -n "$NS" exec -i deploy/citus-coordinator -- psql -U app -d app -tAc "
