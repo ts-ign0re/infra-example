@@ -20,7 +20,7 @@
 
 ```yaml
 # infra/k8s/citus-coordinator.yaml
-image: citusdata/citus:12.1  # ✅ Точная версия
+image: citusdata/citus:13.0  # ✅ Точная версия
 
 # ❌ Не используем:
 # image: citusdata/citus:latest
@@ -36,16 +36,16 @@ image: citusdata/citus:12.1  # ✅ Точная версия
 
 ```yaml
 # Redis
-image: redis:7.2-alpine
+image: redis:8.2.2
 
 # Redpanda (Kafka)
-image: vectorized/redpanda:v23.2.1
+image: redpandadata/redpanda:v25.2.11
 
 # Grafana
-image: grafana/grafana:10.2.0
+image: grafana/grafana:10.4.3
 
 # Loki
-image: grafana/loki:2.9.0
+image: grafana/loki:2.9.4
 ```
 
 ---
@@ -159,9 +159,9 @@ fi
 kubectl -n dev-infra get pods -o yaml | grep "image:"
 
 # Должно быть одинаково на macOS и Linux:
-# citusdata/citus:12.1
-# redis:7.2-alpine
-# vectorized/redpanda:v23.2.1
+# citusdata/citus:13.0
+# redis:8.2.2
+# redpandadata/redpanda:v25.2.11
 ```
 
 ### 2. Миграции тестируются на обеих платформах
@@ -260,12 +260,12 @@ make tilt-up
 
 | Компонент | Версия | Фиксирована |
 |-----------|--------|-------------|
-| Citus | 12.1 | ✅ Yes |
-| PostgreSQL | 16 (в составе Citus) | ✅ Yes |
-| Redis | 7.2-alpine | ✅ Yes |
-| Redpanda | v23.2.1 | ✅ Yes |
-| Grafana | 10.2.0 | ✅ Yes |
-| Loki | 2.9.0 | ✅ Yes |
+| Citus | 13.0 | ✅ Yes |
+| PostgreSQL | 18 (в составе Citus) | ✅ Yes |
+| Redis | 8.2.2 | ✅ Yes |
+| Redpanda | v25.2.11 | ✅ Yes |
+| Grafana | 10.4.3 | ✅ Yes |
+| Loki | 2.9.4 | ✅ Yes |
 | Kubernetes | kind 1.29+ / k3s 1.28+ | ⚠️ Зависит от установки |
 
 ---

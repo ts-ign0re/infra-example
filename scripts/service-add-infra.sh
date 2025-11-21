@@ -440,8 +440,8 @@ else
 fi
 
 echo -e "${YELLOW}📖 Documentation:${RESET}"
-echo "   - Services Guide: docs/SERVICES_GUIDE.md"
-echo "   - Production Deploy: docs/PRODUCTION_DEPLOYMENT.md"
+echo "   - Services Guide: docs/05-SERVICES-GUIDE.md"
+echo "   - Production Deploy: docs/06-PRODUCTION-DEPLOYMENT.md"
 echo ""
 
 print_success "Done!"

@@ -390,8 +390,8 @@ make tilt-up
 
 ## 🔗 Related Documentation
 
-- [Services Guide](SERVICES_GUIDE.md) - Full development guide
-- [Production Deployment](PRODUCTION_DEPLOYMENT.md) - CI/CD setup
+- [Services Guide](../docs/05-SERVICES-GUIDE.md) - Full development guide
+- [Production Deployment](../docs/06-PRODUCTION-DEPLOYMENT.md) - CI/CD setup
 - [Architecture Specs](specs.md) - Platform architecture
 
 ---

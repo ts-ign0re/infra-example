@@ -12,7 +12,7 @@
 
 **Materialized Views** - это кэшированные проекции (read models):
 - Хранят текущее состояние
-- Обновляются периодически или по триггеру
+- Обновляются по расписанию через Kubernetes CronJob
 - Быстрые SELECT запросы
 
 ---
@@ -218,108 +218,53 @@ const topPlayers = await pool.query(query, [tenantId]);
 
 ## Обновление Materialized Views
 
-### ✅ Автоматическое обновление через триггеры (по умолчанию)
+### ✅ Автоматическое обновление через Kubernetes CronJob (по умолчанию)
 
 **Как это работает:**
-- После каждого `INSERT` в event tables автоматически обновляются соответствующие views
-- Используются STATEMENT-level триггеры (не ROW-level) - эффективнее
-- Задержка: ~100-300ms - приемлемо для беттинга
-- Views всегда актуальные (real-time)
+- Периодически вызывается функция `refresh_aggregate_views()`
+- Обновляются все существующие materialized views
+- Для view с уникальными индексами используется `CONCURRENTLY`
+- Нагрузка распределяется по времени, запись событий не замедляется
 
-**Что обновляется:**
+**Где настраивается:**
+- `infra/k8s/cronjob-refresh-views.yaml`
+- По умолчанию: каждые 5 минут (`*/5 * * * *`)
 
-| Event Table | Обновляемые Views | Задержка |
-|-------------|-------------------|----------|
-| `bet_events` | bets_view, user_activity_view, tenants_summary_view | ~150ms |
-| `balance_events` | user_balances_view, user_activity_view, tenants_summary_view | ~100ms |
-| `payment_events` | payments_view, user_activity_view, tenants_summary_view | ~120ms |
-
-**Проверка статуса:**
+**Ручной запуск:**
 
 ```sql
--- Посмотреть когда views обновлялись
-SELECT * FROM get_views_refresh_status();
+SELECT refresh_aggregate_views();
 ```
 
-```typescript
-// В приложении
-const status = await pool.query('SELECT * FROM get_views_refresh_status()');
-console.log(status.rows);
-/*
-[
-  {
-    view_name: 'bets_view',
-    last_refreshed_at: '2025-11-18 17:45:32',
-    seconds_ago: 5,
-    refresh_count: 127,
-    avg_refresh_time_ms: 145,
-    status: 'fresh'
-  }
-]
-*/
-```
+### Управление расписанием
 
-### Отключение триггеров (если нужно)
-
-```sql
--- Временно отключить для bulk insert
-ALTER TABLE bet_events DISABLE TRIGGER after_bet_events_insert;
-
--- Массовый импорт...
-INSERT INTO bet_events SELECT * FROM staging_bets;
-
--- Включить обратно
-ALTER TABLE bet_events ENABLE TRIGGER after_bet_events_insert;
-
--- Обновить views вручную
-SELECT manual_refresh_all_views();
-```
+- Измените `spec.schedule` в `infra/k8s/cronjob-refresh-views.yaml`
+- Для near real-time сценариев используйте `* * * * *` (каждую минуту)
+- Для тяжёлых отчётных view используйте более редкий график
 
 ---
 
-## Триггеры для real-time обновлений
+## Обоснование выбора CronJob
 
-✅ **УЖЕ НАСТРОЕНО!** Views автоматически обновляются после каждого INSERT.
-
-### Почему триггеры, а не pg_cron?
+### Почему CronJob, а не триггеры?
 
 **Архитектурное решение:**
-- ✅ **PostgreSQL триггеры** - работают "из коробки" в Citus
-- ❌ **pg_cron** - требует custom образ PostgreSQL (недоступен в citusdata/citus)
-- ❌ **External scheduler** - дополнительная сложность
-- ❌ **Manual refresh** - не real-time
-
-**Для беттинга триггеры оптимальны:**
-- Задержка ~100-300ms приемлема
-- Данные всегда актуальные
-- Не нужны внешние зависимости
-- Простота эксплуатации
+- ✅ Триггеры не поддерживаются на Citus distributed tables
+- ✅ Запись событий не замедляется (refresh по расписанию)
+- ✅ Простая эксплуатация в Kubernetes
+- ❌ Данные в views обновляются с задержкой (по расписанию)
 
 ### Как это работает:
 
 ```
-1. INSERT INTO bet_events (...) 
+1. По расписанию CronJob запускает контейнер
    ↓
-2. Триггер after_bet_events_insert срабатывает
+2. Выполняется SELECT refresh_aggregate_views();
    ↓  
-3. REFRESH MATERIALIZED VIEW CONCURRENTLY bets_view
+3. Все materialized views обновляются (CONCURRENTLY когда возможно)
    ↓
-4. INSERT завершается (с задержкой ~150ms)
-   ↓
-5. View актуальна!
+4. Завершение job и ожидание следующего запуска
 ```
-
-### Преимущества:
-
-✅ **Real-time данные** - views всегда актуальные  
-✅ **Не нужен внешний scheduler** - всё в PostgreSQL  
-✅ **STATEMENT-level triggers** - не замедляют массовые INSERT  
-✅ **CONCURRENTLY** - не блокирует SELECT запросы  
-
-### Недостатки и решения:
-
-⚠️ **Добавляет ~100-300ms к INSERT** - приемлемо для беттинга  
-⚠️ **Может быть overhead на высокой нагрузке** - см. оптимизацию ниже
 
 ### Мониторинг производительности:
 
@@ -364,12 +309,11 @@ REFRESH MATERIALIZED VIEW bets_view;
 
 ### 2. Обновляйте по расписанию
 
-**Для real-time системы триггеры уже настроены!**
+Обновление по расписанию уже настроено через Kubernetes CronJob.
 
-Но если вам нужен fallback или вы отключили триггеры:
-
-- **Редко изменяющиеся данные:** 1 раз в час (если триггеры отключены)
-- **Real-time (текущая настройка):** Автоматически через триггеры после каждого INSERT
+- **Обычно:** каждые 5 минут
+- **Near real-time:** каждую минуту
+- **Тяжёлые отчёты:** реже (например, каждый час)
 
 ### 3. Мониторинг времени обновления
 
@@ -492,35 +436,26 @@ SELECT tenant_id, bet_id, status
 FROM bet_events WHERE ...;
 ```
 
-**Вариант 3: Использовать условные триггеры (обновлять раз в N секунд)**
-```sql
--- См. раздел "Conditional refresh" в миграции V5
-```
+**Вариант 3: Условный/частичный refresh по расписанию**
+— выделите отдельные представления или используйте WHERE-условия для отдельных сегментов данных; вызов выполняется через CronJob.
 
 ---
 
 ## FAQ
 
-### Можно ли использовать pg_cron вместо триггеров?
+### Можно ли использовать pg_cron вместо CronJob?
 
-Нет, `pg_cron` недоступен в образе `citusdata/citus:12.1`. 
+Теоретически да, но `pg_cron` недоступен в образе `citusdata/citus:13.0`.
 
 **Альтернативы:**
-1. ✅ **Триггеры** (текущий подход) - работают из коробки
-2. ❌ Собрать custom образ с pg_cron - сложность эксплуатации
-3. ❌ Kubernetes CronJob - задержка обновления до 5 минут
+1. ✅ **Kubernetes CronJob** (текущий подход) — просто и прозрачно
+2. ❌ Собрать custom образ с pg_cron — сложность эксплуатации
+3. ❌ Триггеры — не поддерживаются Citus на distributed tables
 
 ### Можно ли обновлять views реже?
 
-Да, если real-time не критичен:
-
-```sql
--- Отключить триггеры
-DROP TRIGGER after_bet_events_insert ON bet_events;
-
--- Настроить Kubernetes CronJob (см. раздел документации выше)
--- Или использовать scheduled task в приложении
-```
+Да. Измените расписание в `infra/k8s/cronjob-refresh-views.yaml` (поле `spec.schedule`).
+Либо запускайте обновление из приложения по своему графику, вызывая `SELECT refresh_aggregate_views();`.
 
 ### Сколько памяти занимают materialized views?
 

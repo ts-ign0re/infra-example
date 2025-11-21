@@ -46,7 +46,7 @@
 4. **[10. Materialized Views](10-MATERIALIZED-VIEWS.md)** 📊
    - Read-модели для быстрого чтения
    - Доступные views: bets, balances, payments, analytics
-   - Автоматическое обновление через реактивные триггеры (~100-300ms)
+   - Автоматическое обновление через Kubernetes CronJob (по расписанию)
    - Performance tips
    - Мониторинг и troubleshooting
 
@@ -59,7 +59,7 @@
 
 6. **[12. Архитектурные решения](12-ARCHITECTURE-DECISIONS.md)** 🧠
    - Event Sourcing vs Traditional CRUD
-   - Reactive Triggers для Materialized Views
+   - Kubernetes CronJob для обновления Materialized Views
    - Multi-tenancy в Citus
    - Idempotency Keys
    - Rationale и trade-offs

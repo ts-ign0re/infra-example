@@ -194,7 +194,7 @@ app.post('/bets', extractTenantId, async (req: any, res) => {
     
     await client.query('COMMIT');
     
-    // 3. Подождать 200ms пока триггер обновит view
+    // 3. Подождать, пока обновится проекция (CronJob/ручной refresh)
     await new Promise(resolve => setTimeout(resolve, 200));
     
     // 4. Прочитать из materialized view
@@ -357,7 +357,7 @@ class BettingAPI {
         
         try {
             // 1. Проверить idempotency key в materialized view
-            // (триггеры автоматически обновляют view после INSERT)
+            // (обновление view выполняется по расписанию или вручную)
             $stmt = $this->db->prepare("
                 SELECT bet_id FROM bets_view 
                 WHERE tenant_id = :tenant_id 
@@ -413,7 +413,7 @@ class BettingAPI {
             
             $this->db->commit();
             
-            // 3. Подождать пока триггер обновит view
+            // 3. Подождать, пока обновится проекция
             usleep(200000); // 200ms
             
             // 4. Прочитать из view

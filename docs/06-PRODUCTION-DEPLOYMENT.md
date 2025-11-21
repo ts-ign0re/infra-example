@@ -815,7 +815,7 @@ spec:
 
 ### Phase 4: Documentation & Training (Week 4)
 
-- [ ] Обновить SERVICES_GUIDE.md с prod примерами
+- [ ] Обновить 05-SERVICES-GUIDE.md с prod примерами
 - [ ] Создать runbooks для common issues
 - [ ] Провести training для команды
 - [ ] Создать incident response plan

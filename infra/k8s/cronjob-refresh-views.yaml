@@ -15,7 +15,7 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: refresh-views
-            image: postgres:15
+            image: postgres:18
             command:
             - /bin/sh
             - -c
@@ -25,4 +25,7 @@ spec:
               echo "Aggregate views refreshed successfully"
             env:
             - name: DATABASE_URL
-              value: "postgresql://app:app@citus-coordinator.dev-infra.svc.cluster.local:5432/app"
+              valueFrom:
+                configMapKeyRef:
+                  name: common-env
+                  key: DATABASE_URL

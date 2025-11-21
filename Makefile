@@ -9,10 +9,14 @@ infra-up:
 		$(COMPOSE) up -d ; \
 	else \
 		kubectl apply -f $(INFRA_DIR)/k8s/namespace.yaml ; \
+		kubectl apply -f $(INFRA_DIR)/k8s/common-env-configmap.yaml -n $(K8S_NS) ; \
 		kubectl apply -f $(INFRA_DIR)/k8s/redpanda.yaml -n $(K8S_NS) ; \
 		kubectl apply -f $(INFRA_DIR)/k8s/schema-registry.yaml -n $(K8S_NS) ; \
 		kubectl apply -f $(INFRA_DIR)/k8s/redis.yaml -n $(K8S_NS) ; \
-		kubectl apply -f $(INFRA_DIR)/k8s/postgres.yaml -n $(K8S_NS) ; \
+		kubectl apply -f $(INFRA_DIR)/k8s/citus-coordinator.yaml -n $(K8S_NS) ; \
+		kubectl apply -f $(INFRA_DIR)/k8s/citus-worker.yaml -n $(K8S_NS) ; \
+		kubectl apply -f $(INFRA_DIR)/k8s/citus-init.yaml -n $(K8S_NS) ; \
+		kubectl apply -f $(INFRA_DIR)/k8s/cronjob-refresh-views.yaml -n $(K8S_NS) ; \
 	fi
 
 infra-down:
@@ -27,10 +31,11 @@ infra-down:
 		kubectl delete -f $(INFRA_DIR)/k8s/citus-init.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/citus-worker.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/citus-coordinator.yaml -n $(K8S_NS) --ignore-not-found ; \
-		kubectl delete -f $(INFRA_DIR)/k8s/postgres.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/redis.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/schema-registry.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete -f $(INFRA_DIR)/k8s/redpanda.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/cronjob-refresh-views.yaml -n $(K8S_NS) --ignore-not-found ; \
+		kubectl delete -f $(INFRA_DIR)/k8s/common-env-configmap.yaml -n $(K8S_NS) --ignore-not-found ; \
 		kubectl delete namespace $(K8S_NS) --ignore-not-found || true ; \
 		for i in $$(seq 1 60); do \
 			if ! kubectl get ns $(K8S_NS) >/dev/null 2>&1; then echo "Namespace $(K8S_NS) deleted"; break; fi; \
